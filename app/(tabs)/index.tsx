@@ -1,98 +1,108 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { useState } from "react";
+import { MotiView } from "moti";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function MiningDashboard() {
+  const [mining, setMining] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
-export default function HomeScreen() {
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={{ flex: 1, backgroundColor: "white", padding: 20 }}>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {/* HEADER */}
+      <Text style={{ fontSize: 30, fontWeight: "bold", textAlign: "center", marginBottom: 20 }}>
+        ⛏️ Mining Dashboard
+      </Text>
+
+      {/* BALANCE CARD */}
+      <MotiView
+        from={{ opacity: 0, translateY: 20 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: "timing", duration: 400 }}
+        style={{
+          backgroundColor: "#f3f3f3",
+          paddingVertical: 20,
+          borderRadius: 15,
+          marginBottom: 20,
+          borderColor: "#ddd",
+          borderWidth: 1,
+        }}
+      >
+        <Text style={{ textAlign: "center", fontSize: 18, color: "#888" }}>
+          Current Balance
+        </Text>
+        <Text style={{ textAlign: "center", fontSize: 40, fontWeight: "bold", color: "#333" }}>
+          {balance.toFixed(2)} <Text style={{ color: "#007aff" }}>VAD</Text>
+        </Text>
+      </MotiView>
+
+      {/* STATUS */}
+      <View style={{ alignItems: "center", marginBottom: 20 }}>
+        <Text style={{ fontSize: 18, color: "#333" }}>
+          Status:
+          <Text style={{ fontWeight: "bold", color: mining ? "green" : "red", marginLeft: 5 }}>
+            {mining ? "Mining Active" : "Stopped"}
+          </Text>
+        </Text>
+
+        {/* Pulse animation when mining */}
+        {mining && (
+          <MotiView
+            from={{ opacity: 0.6, scale: 1 }}
+            animate={{ opacity: 1, scale: 1.2 }}
+            transition={{
+              loop: true,
+              type: "timing",
+              duration: 900,
+            }}
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 6,
+              backgroundColor: "green",
+              marginTop: 10,
+            }}
+          />
+        )}
+      </View>
+
+      {/* START/STOP BUTTON */}
+      <TouchableOpacity
+        onPress={() => setMining(!mining)}
+        style={{
+          paddingVertical: 15,
+          backgroundColor: mining ? "#dc3545" : "#28a745",
+          borderRadius: 10,
+          alignItems: "center",
+        }}
+        activeOpacity={0.85}
+      >
+        <Text style={{ color: "white", fontSize: 18, fontWeight: "bold" }}>
+          {mining ? "Stop Mining" : "Start Mining"}
+        </Text>
+      </TouchableOpacity>
+
+      {/* CLAIM BUTTON */}
+      <TouchableOpacity
+        onPress={() => {}}
+        style={{
+          paddingVertical: 15,
+          backgroundColor: "#007aff",
+          borderRadius: 10,
+          marginTop: 20,
+          alignItems: "center",
+        }}
+        activeOpacity={0.85}
+      >
+        <Text style={{ color: "white", fontSize: 18, fontWeight: "bold" }}>
+          Claim Rewards
+        </Text>
+      </TouchableOpacity>
+
+      {isLoading && (
+        <ActivityIndicator size="large" color="#007aff" style={{ marginTop: 20 }} />
+      )}
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
