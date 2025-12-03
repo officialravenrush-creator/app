@@ -1,12 +1,81 @@
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MotiView } from "moti";
 import { MaterialIcons } from "@expo/vector-icons"; // Import iconic icons
+import { auth, db } from "../../firebase/firebaseConfig"; // Firebase config import
+import { doc, getDoc, updateDoc } from "firebase/firestore"; // Firestore imports
+import { startMining, stopMining, claimMiningRewards } from "../../firebase/mining"; // Mining functions
 
 export default function MiningDashboard() {
+  const [miningData, setMiningData] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [referralBonus, setReferralBonus] = useState(0);
   const [mining, setMining] = useState(false);
   const [balance, setBalance] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  
+useEffect(() => {
+  const fetchData = async () => {
+    if (auth.currentUser) {
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      const userSnap = await getDoc(userRef);
+      const userProfileData = userSnap.data();
+
+      if (userProfileData) {
+        setUserProfile(userProfileData);
+
+        const miningRef = doc(db, "miningData", auth.currentUser.uid);
+        const miningSnap = await getDoc(miningRef);
+        const miningData = miningSnap.data();
+
+        if (miningData) {
+          setMiningData(miningData);
+          setBalance(miningData.balance);
+
+          // Calculate referral bonus if applicable
+          if (userProfileData.referredBy) {
+            const referrerRef = doc(db, "users", userProfileData.referredBy);
+            const refSnap = await getDoc(referrerRef);
+            if (refSnap.exists()) {
+              const referrerData = refSnap.data();
+              setReferralBonus(referrerData.referrals.totalReferred * 0.1); // 10% bonus
+            }
+          }
+        }
+      }
+      setIsLoading(false);
+    }
+  };
+
+  fetchData();
+}, []);
+
+  const handleStartStopMining = async () => {
+    if (auth.currentUser) {
+      if (mining) {
+        await stopMining(auth.currentUser.uid);
+        setMining(false);
+      } else {
+        await startMining(auth.currentUser.uid);
+        setMining(true);
+      }
+    }
+  };
+
+  const handleClaimRewards = async () => {
+    if (auth.currentUser) {
+      const reward = await claimMiningRewards(auth.currentUser.uid);
+      setBalance(balance + reward);  // Update balance with claimed rewards
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007aff" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -27,6 +96,21 @@ export default function MiningDashboard() {
           {balance.toFixed(2)} <Text style={styles.vadText}>VAD</Text>
         </Text>
       </MotiView>
+
+      {/* REFERRAL BONUS */}
+      {referralBonus > 0 && (
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: "timing", duration: 400 }}
+          style={styles.referralBonusCard}
+        >
+          <Text style={styles.referralBonusText}>Referral Bonus Earned</Text>
+          <Text style={styles.referralBonusAmount}>
+            +{referralBonus.toFixed(2)} VAD
+          </Text>
+        </MotiView>
+      )}
 
       {/* STATUS */}
       <View style={styles.statusContainer}>
@@ -54,7 +138,7 @@ export default function MiningDashboard() {
 
       {/* START/STOP BUTTON */}
       <TouchableOpacity
-        onPress={() => setMining(!mining)}
+        onPress={handleStartStopMining}
         style={[styles.actionButton, { backgroundColor: mining ? "#dc3545" : "#28a745" }]}
         activeOpacity={0.85}
       >
@@ -71,7 +155,7 @@ export default function MiningDashboard() {
 
       {/* CLAIM BUTTON */}
       <TouchableOpacity
-        onPress={() => {}}
+        onPress={handleClaimRewards}
         style={styles.claimButton}
         activeOpacity={0.85}
       >
@@ -83,10 +167,6 @@ export default function MiningDashboard() {
         />
         <Text style={styles.claimButtonText}>Claim Rewards</Text>
       </TouchableOpacity>
-
-      {isLoading && (
-        <ActivityIndicator size="large" color="#007aff" style={styles.loadingIndicator} />
-      )}
     </View>
   );
 }
@@ -132,6 +212,29 @@ const styles = StyleSheet.create({
   vadText: {
     color: "#007aff",
   },
+  referralBonusCard: {
+    backgroundColor: "#d1ecf1",
+    paddingVertical: 20,
+    borderRadius: 20,
+    marginBottom: 30,
+    borderColor: "#bee5eb",
+    borderWidth: 1,
+    width: "100%",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+  },
+  referralBonusText: {
+    fontSize: 18,
+    color: "#5bc0de",
+  },
+  referralBonusAmount: {
+    fontSize: 30,
+    fontWeight: "bold",
+    color: "#007aff",
+  },
   statusContainer: {
     alignItems: "center",
     marginBottom: 30,
@@ -151,7 +254,7 @@ const styles = StyleSheet.create({
     backgroundColor: "green",
     marginTop: 10,
   },
-  actionButton: {
+    actionButton: {
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 30,
@@ -191,10 +294,14 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: 10,
   },
-  loadingIndicator: {
-    marginTop: 20,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
   icon: {
     marginRight: 10,
   },
 });
+

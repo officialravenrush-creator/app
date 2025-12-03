@@ -1,3 +1,4 @@
+// app/_layout.tsx
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -15,9 +16,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
-        {/* Make sure (tabs) is the main entry point */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        {/* Add the profileSetup screen for when it's required */}
         <Stack.Screen name="auth/profileSetup" options={{ presentation: 'modal', title: 'Complete Profile' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
