@@ -295,7 +295,7 @@ export default function MiningDashboard() {
 
       <View style={styles.iconRow}>
         <Pressable
-          onPress={() => router.push("/(tabs)/profile" as unknown as any)}
+          onPress={() => router.push("/profile")}
           style={{ flex: 1, marginHorizontal: 6 }}
         >
           {({ pressed }: { pressed: boolean }) => (
@@ -311,7 +311,7 @@ export default function MiningDashboard() {
         </Pressable>
 
         <Pressable
-          onPress={() => router.push("/(tabs)/explore" as unknown as any)}
+          onPress={() => router.push("/explore")}
           style={{ flex: 1, marginHorizontal: 6 }}
         >
           {({ pressed }: { pressed: boolean }) => (
@@ -326,7 +326,7 @@ export default function MiningDashboard() {
           )}
         </Pressable>
 
-        <Pressable onPress={() => router.push("/auth/login" as unknown as any)} style={{ flex: 1, marginHorizontal: 6 }}>
+        <Pressable onPress={() => router.push("/auth/login")} style={{ flex: 1, marginHorizontal: 6 }}>
           {({ pressed }: { pressed: boolean }) => (
             <MotiView
               animate={{ scale: pressed ? 0.96 : 1, opacity: pressed ? 0.95 : 1 }}

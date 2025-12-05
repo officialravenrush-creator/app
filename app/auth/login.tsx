@@ -11,6 +11,7 @@ import {
 import { Link, useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db, storage } from "../../firebase/firebaseConfig";
+import { doc, getDoc } from "firebase/firestore"; 
 
 import Animated, {
   FadeInUp,
@@ -50,17 +51,21 @@ export default function LoginScreen() {
       await signInWithEmailAndPassword(auth, email.trim(), password);
 
       const user = auth.currentUser;
-      if (!user) {
-        triggerError("Login failed. Try again.");
-        setLoading(false);
-        return;
-      }
+if (!user) {
+  triggerError("Login failed. Try again.");
+  setLoading(false);
+  return;
+}
 
-// const userRef = doc(db, "users", user.uid);
-// const docSnap = await getDoc(userRef);
+const userRef = doc(db, "users", user.uid);
+const docSnap = await getDoc(userRef);
 
-// if (!docSnap.exists()) router.replace("/auth/profileSetup");
-// else router.replace("/");
+if (!docSnap.exists()) {
+  router.replace("/auth/profileSetup");
+} else {
+  router.replace("/");
+}
+
 
 
     } catch (error: any) {
