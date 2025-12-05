@@ -1,183 +1,324 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image, Alert, StyleSheet } from "react-native";
-import { auth, db } from "../../firebase/firebaseConfig"; // Firebase imports
-import { doc, getDoc, updateDoc } from "firebase/firestore"; // Firestore imports
-import { MaterialIcons } from "@expo/vector-icons"; // Material Icons
+// NEW PREMIUM PROFILE SCREEN (tabs)/profile.tsx
+import React, { useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  Animated,
+  Easing,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { auth } from "../../firebase/firebaseConfig";
+import { db } from "../../firebase/firebaseConfig";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  onSnapshot,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 
 export default function ProfileScreen() {
-  const [userProfile, setUserProfile] = useState<any>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const user = auth.currentUser;
+  const uid = user?.uid;
+
   const [username, setUsername] = useState("");
-  const [avatar, setAvatar] = useState<string | null>(null);
   const [balance, setBalance] = useState(0);
+  const [referralCode, setReferralCode] = useState("");
+  const [referredBy, setReferredBy] = useState<string | null>(null);
+  const [referredUsers, setReferredUsers] = useState<any[]>([]);
+  const [refInput, setRefInput] = useState("");
+  const [refError, setRefError] = useState("");
+  const [saveAllowed, setSaveAllowed] = useState(false);
+
+  // strong animations
+  const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-  const fetchProfileData = async () => {
-    if (auth.currentUser?.uid) {
-      try {
-        const userRef = doc(db, "users", auth.currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-          Alert.alert("Error", "User profile data not found.");
-          return;
-        }
-        const userData = userSnap.data();
+    Animated.timing(fade, {
+      toValue: 1,
+      duration: 500,
+      easing: Easing.out(Easing.exp),
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
-        setUserProfile(userData);
-        setUsername(userData?.username || "");
-        setAvatar(userData?.avatarUrl || null);
+  // LIVE REAL‑TIME FETCH — Firestore listeners
+  useEffect(() => {
+    if (!uid) return;
 
-        const miningRef = doc(db, "miningData", auth.currentUser.uid);
-        const miningSnap = await getDoc(miningRef);
-        if (!miningSnap.exists()) {
-          Alert.alert("Error", "Mining data not found.");
-          return;
-        }
-        const miningData = miningSnap.data();
-        setBalance(miningData?.balance || 0);
-      } catch (error) {
-        Alert.alert("Error", "Failed to load profile data");
-        console.error(error);
+    const unsubProfile = onSnapshot(doc(db, "users", uid), (snap) => {
+      if (!snap.exists()) return;
+      const data: any = snap.data();
+      setUsername(data.username || "");
+      setReferralCode(data.referralCode || "");
+      setReferredBy(data.referredBy || null);
+
+      // If user has not entered referredBy, keep input visible
+      if (!data.referredBy) {
+        setSaveAllowed(true);
+      } else {
+        setSaveAllowed(false);
       }
-    } else {
-      Alert.alert("Error", "User is not logged in.");
-    }
-  };
+    });
 
-  fetchProfileData();
-}, []);
+    const unsubMining = onSnapshot(doc(db, "miningData", uid), (snap) => {
+      if (snap.exists()) {
+        setBalance(snap.data()?.balance || 0);
+      }
+    });
 
+    // fetch referrals list
+    const fetchReferredUsers = async () => {
+      const q = query(
+        collection(db, "users"),
+        where("referredBy", "==", referralCode)
+      );
+      const snap = await getDocs(q);
+      const list: any[] = [];
+      snap.forEach((doc) => list.push(doc.data()));
+      setReferredUsers(list);
+    };
 
-  const handleEditProfile = () => {
-    setIsEditing(true);
-  };
+    fetchReferredUsers();
 
-  const handleSaveProfile = async () => {
-    if (!username.trim()) {
-      Alert.alert("Error", "Username is required");
+    return () => {
+      unsubProfile();
+      unsubMining();
+    };
+  }, [uid, referralCode]);
+
+  // validate referral code live
+  const validateReferral = async (code: string) => {
+    setRefInput(code);
+    setRefError("");
+
+    if (!code.trim()) return;
+    if (code === referralCode) {
+      setRefError("You cannot refer yourself.");
       return;
     }
 
-    try {
-      const userRef = doc(db, "users", auth.currentUser?.uid!); // Non-null assertion since we've already checked for uid
-      await updateDoc(userRef, {
-        username: username.trim(),
-        avatarUrl: avatar || null,
-      });
+    const q = query(
+      collection(db, "users"),
+      where("referralCode", "==", code.trim())
+    );
+    const snap = await getDocs(q);
 
-      Alert.alert("Success", "Profile updated successfully");
-      setIsEditing(false);
-    } catch (error) {
-      Alert.alert("Error", "Failed to update profile");
+    if (snap.empty) {
+      setRefError("Invalid referral code");
+    } else {
+      setRefError("");
+    }
+  };
+
+  const saveReferral = async () => {
+    if (!uid) return;
+    if (!refInput.trim()) return Alert.alert("Error", "Enter a referral code.");
+    if (refError) return Alert.alert("Error", refError);
+
+    try {
+      await updateDoc(doc(db, "users", uid), {
+        referredBy: refInput.trim(),
+      });
+      Alert.alert("Success", "Referral code saved!");
+      setSaveAllowed(false);
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
     }
   };
 
   return (
-    <View style={styles.container}>
-      {userProfile ? (
-        <>
-          <Text style={styles.headerText}>Profile</Text>
+    <Animated.View style={[styles.container, { opacity: fade }]}>      
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={styles.pageTitle}>Your Profile</Text>
 
-          {/* Avatar */}
-          <TouchableOpacity onPress={() => {}} style={styles.avatarContainer}>
-            {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.avatar} />
-            ) : (
-              <MaterialIcons name="person" size={60} color="#007bff" />
-            )}
-          </TouchableOpacity>
+        {/* STATIC AVATAR — premium style */}
+        <View style={styles.avatarBox}>
+          <Ionicons name="person" size={72} color="#5865F2" />
+        </View>
 
-          {/* Username */}
+        {/* USERNAME */}
+        <View style={styles.card}>
           <Text style={styles.label}>Username</Text>
-          {isEditing ? (
+          <Text style={styles.value}>{username}</Text>
+        </View>
+
+        {/* BALANCE */}
+        <View style={styles.card}>
+          <Text style={styles.label}>VAD Balance</Text>
+          <Text style={styles.value}>{balance.toFixed(2)} VAD</Text>
+        </View>
+
+        {/* REFERRAL CODE DISPLAY + COPY */}
+        <View style={styles.card}>
+          <Text style={styles.label}>Your Referral Code</Text>
+          <View style={styles.refRow}>
+            <Text style={styles.refText}>{referralCode}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                navigator.clipboard.writeText(referralCode);
+                Alert.alert("Copied!", "Referral code copied");
+              }}
+              style={styles.copyBtn}
+            >
+              <Text style={styles.copyText}>COPY</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ENTER REFERRAL CODE IF NOT SET */}
+        {referredBy ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>Referred By</Text>
+            <Text style={styles.value}>{referredBy}</Text>
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.label}>Enter Referral Code</Text>
             <TextInput
-              value={username}
-              onChangeText={setUsername}
               style={styles.input}
+              placeholder="Referral code"
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={refInput}
+              onChangeText={(t) => validateReferral(t)}
             />
+            {refError.length > 0 && <Text style={styles.error}>{refError}</Text>}
+            {saveAllowed && !refError && refInput.trim() ? (
+              <TouchableOpacity onPress={saveReferral} style={styles.primaryBtn}>
+                <Text style={styles.primaryBtnText}>Save Code</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
+
+        {/* REFERRALS LIST */}
+        <View style={styles.card}>
+          <Text style={styles.label}>Users You Referred</Text>
+          {referredUsers.length === 0 ? (
+            <Text style={styles.muted}>No referred users yet</Text>
           ) : (
-            <Text style={styles.text}>{username}</Text>
+            referredUsers.map((u, index) => (
+              <View key={index} style={styles.refUser}>
+                <Ionicons name="person-circle" size={22} color="#5865F2" />
+                <Text style={styles.value}>{u.username}</Text>
+              </View>
+            ))
           )}
-
-          {/* Balance */}
-          <Text style={styles.label}>Balance</Text>
-          <Text style={styles.text}>{balance.toFixed(2)} VAD</Text>
-
-          {/* Referral Code */}
-          <Text style={styles.label}>Referral Code</Text>
-          <Text style={styles.text}>{userProfile?.referralCode}</Text>
-
-          {/* Referral By */}
-          {userProfile?.referredBy && (
-            <>
-              <Text style={styles.label}>Referred By</Text>
-              <Text style={styles.text}>{userProfile?.referredBy}</Text>
-            </>
-          )}
-
-          {/* Edit or Save Button */}
-          <TouchableOpacity
-            onPress={isEditing ? handleSaveProfile : handleEditProfile}
-            style={styles.button}
-          >
-            <Text style={styles.buttonText}>{isEditing ? "Save" : "Edit"}</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <Text>Loading...</Text>
-      )}
-    </View>
+        </View>
+      </ScrollView>
+    </Animated.View>
   );
 }
+
+const BLUE = "#5865F2";
+const CARD = "#0b0b0b";
+const DARK = "#000000";
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: DARK,
     padding: 20,
-    backgroundColor: "#fff",
   },
-  headerText: {
-    fontSize: 24,
-    fontWeight: "600",
-    marginBottom: 20,
+  pageTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 18,
     textAlign: "center",
   },
-  avatarContainer: {
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  avatar: {
+  avatarBox: {
     width: 120,
     height: 120,
     borderRadius: 60,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignSelf: "center",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  card: {
+    backgroundColor: CARD,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
   },
   label: {
+    color: "rgba(255,255,255,0.65)",
+    fontSize: 13,
+    marginBottom: 6,
+    fontWeight: "600",
+  },
+  value: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
-    marginTop: 10,
   },
-  text: {
+  refRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refText: {
+    color: "#fff",
     fontSize: 16,
-    marginTop: 5,
-    color: "#333",
+    fontWeight: "700",
+  },
+  copyBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: BLUE,
+    borderRadius: 8,
+  },
+  copyText: {
+    color: "#fff",
+    fontWeight: "700",
   },
   input: {
-    fontSize: 16,
-    marginTop: 5,
-    borderWidth: 1,
-    padding: 8,
-    borderRadius: 8,
-    borderColor: "#ddd",
-  },
-  button: {
-    marginTop: 20,
-    backgroundColor: "#007bff",
-    padding: 15,
-    borderRadius: 8,
-  },
-  buttonText: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     color: "#fff",
-    textAlign: "center",
+    fontSize: 15,
+    marginTop: 6,
+  },
+  error: {
+    color: "#ff5b5b",
+    marginTop: 6,
+    fontSize: 13,
     fontWeight: "600",
+  },
+  primaryBtn: {
+    backgroundColor: BLUE,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  primaryBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  muted: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 14,
+  },
+  refUser: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
   },
 });
