@@ -22,7 +22,10 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "permissions": ["INTERNET", "POST_NOTIFICATIONS"]
+      "permissions": [
+        "INTERNET",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "output": "static",
@@ -55,9 +58,9 @@
       "router": {},
       "reactNativeGoogleMobileAdsAppId": "ca-app-pub-4533962949749202~8711232097",
       "eas": {
-        "projectId": "130b662c-af1e-4a8e-84cf-642b13f3df69"
+        "projectId": "8e9af1cf-e5b7-4272-9aaa-fc3b86afff37"
       }
     },
-    "owner": "vad-mining-space"
+    "owner": "skima112"
   }
 }
