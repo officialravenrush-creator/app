@@ -1,8 +1,8 @@
 // app/_layout.tsx
 
-import { Stack, ThemeProvider } from "expo-router";
+import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { DarkTheme, DefaultTheme } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { auth, db } from "../firebase/firebaseConfig";
@@ -40,7 +40,7 @@ export default function RootLayout() {
   if (loading) return <StatusBar style="auto" />;
 
   return (
-    <ThemeProvider theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack
         screenOptions={{
           headerShown: false,

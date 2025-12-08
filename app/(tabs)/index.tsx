@@ -1,5 +1,4 @@
 // app/(tabs)/index.tsx
-// app/(tabs)/index.tsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import {
   View,
@@ -25,20 +24,16 @@ import DailyClaim from "../../components/DailyClaim";
 import Boost from "../../components/Boost";
 import WatchEarn from "../../components/Watch-Earn";
 import AdBanner from "../../components/AdBanner";
+import { Timestamp } from "firebase/firestore"; // if needed
 
-/* ---------- constants (must be above styles because styles uses width) ---------- */
+/* ---------- constants ---------- */
 const { width } = Dimensions.get("window");
 const DAY_SECONDS = 24 * 3600;
 const DAILY_MAX = 4.8;
 
 /* ---------- styles ---------- */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#060B1A",
-  },
-
-  /* TOP NAV (floating, fixed) */
+  container: { flex: 1, backgroundColor: "#060B1A" },
   topNav: {
     position: "absolute",
     top: 12,
@@ -64,7 +59,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   avatar: { width: 48, height: 48, borderRadius: 24 },
-
   chatCircle: {
     width: 48,
     height: 48,
@@ -78,13 +72,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
   },
-
-  /* scroll area */
-  scroll: {
-    paddingHorizontal: 22,
-    paddingTop: 86, // allow for topNav
-  },
-
+  scroll: { paddingHorizontal: 22, paddingTop: 86 },
   headerCard: {
     borderRadius: 16,
     paddingVertical: 12,
@@ -96,49 +84,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 18,
   },
-  headerTitle: {
-    fontSize: 18,
-    color: "#fff",
-    fontWeight: "900",
-  },
-  headerSub: {
-    color: "#bfc7df",
-    marginTop: 4,
-    fontSize: 12,
-  },
-
-  /* current balance */
-  currentWrap: {
-    marginBottom: 14,
-  },
-  currentLabel: {
-    color: "#9FA8C7",
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  balance: {
-    color: "#fff",
-    fontSize: 42,
-    fontWeight: "900",
-  },
-  vadText: {
-    color: "#8B5CF6",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  vadSmall: {
-    color: "#8B5CF6",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  /* buttons */
-  buttonsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 14,
-  },
+  headerTitle: { fontSize: 18, color: "#fff", fontWeight: "900" },
+  headerSub: { color: "#bfc7df", marginTop: 4, fontSize: 12 },
+  currentWrap: { marginBottom: 14 },
+  currentLabel: { color: "#9FA8C7", fontSize: 13, marginBottom: 6 },
+  balance: { color: "#fff", fontSize: 42, fontWeight: "900" },
+  vadText: { color: "#8B5CF6", fontSize: 18, fontWeight: "700" },
+  vadSmall: { color: "#8B5CF6", fontSize: 14, fontWeight: "700" },
+  buttonsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
   halfBtn: {
     width: (width - 22 * 2 - 12) / 2,
     borderRadius: 12,
@@ -150,48 +103,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 12,
   },
-  btnInner: {
-    alignItems: "center",
-  },
+  btnInner: { alignItems: "center" },
   startBtn: {
     backgroundColor: "rgba(255,255,255,0.03)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.04)",
   },
-
-  /* FIXED VERSION — NO DUPLICATE backgroundColor */
   miningActiveBtn: {
     backgroundColor: "rgba(139,92,246,0.16)",
     borderWidth: 1,
     borderColor: "rgba(139,92,246,0.18)",
   },
-
-  btnText: {
-    color: "#fff",
-    marginTop: 8,
-    fontWeight: "700",
-  },
-  smallTimer: {
-    color: "#9FA8C7",
-    marginTop: 6,
-    fontSize: 12,
-  },
-
-  claimBtn: {
-    backgroundColor: "#fff",
-  },
-  claimBtnText: {
-    color: "#0F0A2A",
-    fontWeight: "800",
-    marginTop: 6,
-  },
-  claimAmountText: {
-    marginTop: 6,
-    color: "#0F0A2A",
-    fontWeight: "700",
-  },
-
-  /* session card */
+  btnText: { color: "#fff", marginTop: 8, fontWeight: "700" },
+  smallTimer: { color: "#9FA8C7", marginTop: 6, fontSize: 12 },
+  claimBtn: { backgroundColor: "#fff" },
+  claimBtnText: { color: "#0F0A2A", fontWeight: "800", marginTop: 6 },
+  claimAmountText: { marginTop: 6, color: "#0F0A2A", fontWeight: "700" },
   sessionCard: {
     backgroundColor: "rgba(255,255,255,0.03)",
     borderRadius: 14,
@@ -200,21 +127,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.04)",
   },
-  sessionTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sessionLabel: {
-    color: "#9FA8C7",
-    fontSize: 12,
-  },
-  sessionValue: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "800",
-  },
+  sessionTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  sessionLabel: { color: "#9FA8C7", fontSize: 12 },
+  sessionValue: { color: "#fff", fontSize: 28, fontWeight: "800" },
   miningIcon: {
     width: 56,
     height: 56,
@@ -226,69 +141,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.32,
     shadowRadius: 18,
   },
-
-  progressWrap: {
-    marginTop: 6,
-  },
-  progressBg: {
-    height: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: 10,
-    backgroundColor: "#3B82F6",
-  },
-  progressMeta: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  progressText: {
-    color: "#9FA8C7",
-    fontSize: 12,
-  },
-
-  infoBox: {
-    marginTop: 12,
-    backgroundColor: "rgba(255,255,255,0.02)",
-    borderRadius: 12,
-    padding: 12,
-  },
-  infoTitle: {
-    color: "#fff",
-    fontWeight: "800",
-    marginBottom: 6,
-  },
-  infoBody: {
-    color: "#bfc7df",
-    fontSize: 13,
-  },
-
-  /* banner */
-  bannerCard: {
-    marginTop: 8,
-    backgroundColor: "#0f1113",
-    borderRadius: 12,
-    padding: 18,
-    alignItems: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.03)",
-  },
-  bannerLabel: {
-    color: "#9FA8C7",
-    fontSize: 13,
-  },
-
-  /* utilities */
-  utilityRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 18,
-  },
+  progressWrap: { marginTop: 6 },
+  progressBg: { height: 10, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden" },
+  progressFill: { height: 10, backgroundColor: "#3B82F6" },
+  progressMeta: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  progressText: { color: "#9FA8C7", fontSize: 12 },
+  infoBox: { marginTop: 12, backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 12, padding: 12 },
+  infoTitle: { color: "#fff", fontWeight: "800", marginBottom: 6 },
+  infoBody: { color: "#bfc7df", fontSize: 13 },
+  bannerCard: { marginTop: 8, backgroundColor: "#0f1113", borderRadius: 12, padding: 18, alignItems: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" },
+  utilityRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 18 },
   utilityItem: {
     width: (width - 22 * 2 - 12) / 3,
     backgroundColor: "rgba(255,255,255,0.02)",
@@ -302,79 +164,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 12,
   },
-
-  /* news */
-  newsSection: {
-    marginBottom: 20,
-  },
-  newsHeader: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 12,
-  },
-  newsEmptyCard: {
-    backgroundColor: "rgba(255,255,255,0.02)",
-    borderRadius: 12,
-    padding: 18,
-    alignItems: "center",
-  },
-  newsEmptyText: {
-    color: "#9FA8C7",
-  },
-  newsCardItem: {
-    flexDirection: "row",
-    gap: 12,
-    backgroundColor: "rgba(255,255,255,0.02)",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.03)",
-  },
-  newsImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-    marginRight: 8,
-  },
-  newsImagePlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-    backgroundColor: "rgba(139,92,246,0.06)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
-  },
-  newsTextWrap: {
-    flex: 1,
-  },
-  newsTitleText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 15,
-  },
-  newsBodyText: {
-    color: "#bfc7df",
-    marginTop: 4,
-    fontSize: 13,
-  },
-  newsTimeText: {
-    color: "#9FA8C7",
-    marginTop: 8,
-    fontSize: 11,
-  },
-
-  /* loading */
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#060B1A",
-  },
+  newsSection: { marginBottom: 20 },
+  newsHeader: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 12 },
+  newsEmptyCard: { backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 12, padding: 18, alignItems: "center" },
+  newsEmptyText: { color: "#9FA8C7" },
+  newsCardItem: { flexDirection: "row", gap: 12, backgroundColor: "rgba(255,255,255,0.02)", padding: 12, borderRadius: 12, marginBottom: 12, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" },
+  newsImage: { width: 72, height: 72, borderRadius: 10, marginRight: 8 },
+  newsImagePlaceholder: { width: 72, height: 72, borderRadius: 10, backgroundColor: "rgba(139,92,246,0.06)", justifyContent: "center", alignItems: "center", marginRight: 8 },
+  newsTextWrap: { flex: 1 },
+  newsTitleText: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  newsBodyText: { color: "#bfc7df", marginTop: 4, fontSize: 13 },
+  newsTimeText: { color: "#9FA8C7", marginTop: 8, fontSize: 11 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#060B1A" },
 });
+
+/* ---------- types ---------- */
+interface MiningData {
+  miningActive: boolean;
+  balance: number;
+  lastStart?: number | { toMillis?: () => number };
+}
+
+interface UserProfile {
+  avatarUrl?: string;
+}
+
+interface NewsItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  image?: string;
+  timestamp?: number;
+}
 
 /* ---------- component ---------- */
 export default function MiningDashboard() {
@@ -389,7 +210,6 @@ export default function MiningDashboard() {
     getLiveBalance,
   } = useMining();
 
-  // Animated balance (total + live session)
   const animatedBalance = useRef(new Animated.Value(0)).current;
   const miningActive = miningData?.miningActive ?? false;
   const balanceBase = miningData?.balance ?? 0;
@@ -398,117 +218,103 @@ export default function MiningDashboard() {
   const [dailyOpen, setDailyOpen] = useState(false);
   const [watchOpen, setWatchOpen] = useState(false);
 
-  // session live values (computed every second)
   const [sessionBalance, setSessionBalance] = useState<number>(0);
-  const [sessionElapsed, setSessionElapsed] = useState<number>(0); // seconds
+  const [sessionElapsed, setSessionElapsed] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(DAY_SECONDS);
-  const [news, setNews] = useState<any[]>([]);
+  const [news, setNews] = useState<NewsItem[]>([]);
   const [isClaiming, setIsClaiming] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
 
-  // compute per-second rate
   const perSecond = miningActive ? DAILY_MAX / DAY_SECONDS : 0;
-  const perMinute = perSecond * 60;
-  const perHour = perMinute * 60;
 
-  // Animate displayed balance whenever getLiveBalance or base changes
-  useEffect(() => {
-    try {
-      const val = typeof getLiveBalance === "function" ? getLiveBalance() : undefined;
-      Animated.timing(animatedBalance, {
-        toValue: val ?? balanceBase,
-        duration: 600,
-        useNativeDriver: false,
-      }).start();
-    } catch (e) {
-      console.warn("[AnimatedBalance] getLiveBalance error", e);
+  /* ---------- Animated balance ---------- */
+useEffect(() => {
+  try {
+    const val = typeof getLiveBalance === "function" ? getLiveBalance() : balanceBase;
+    Animated.timing(animatedBalance, { toValue: val, duration: 600, useNativeDriver: false }).start();
+  } catch (e) {
+    console.warn("[AnimatedBalance] getLiveBalance error", e);
+  }
+}, [balanceBase, getLiveBalance, animatedBalance]);
+
+/* ---------- Session computation ---------- */
+type NormalizedMiningData = {
+  balance?: number;
+  miningActive?: boolean;
+  lastStart?: number | { toMillis?: () => number };
+};
+
+const miningDataRef = useRef<NormalizedMiningData | null>(null);
+
+useEffect(() => {
+  if (!miningData) return;
+
+  const normalized: NormalizedMiningData = {
+    ...miningData,
+    lastStart:
+      miningData.lastStart && typeof (miningData.lastStart as any)?.toMillis === "function"
+        ? { toMillis: () => (miningData.lastStart as any).toMillis() }
+        : miningData.lastStart ?? undefined,
+  };
+
+  miningDataRef.current = normalized;
+}, [miningData]);
+
+useEffect(() => {
+  let interval: NodeJS.Timeout;
+
+  const compute = () => {
+    const md = miningDataRef.current;
+    const lastStart = md?.lastStart;
+    const startMs =
+      lastStart && typeof (lastStart as any).toMillis === "function"
+        ? (lastStart as any).toMillis()
+        : Number(lastStart) || 0;
+
+    if (md?.miningActive && startMs > 0) {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      const capped = Math.min(elapsedSeconds, DAY_SECONDS);
+      const sessionGain = capped * perSecond;
+      setSessionElapsed(capped);
+      setSessionBalance(sessionGain);
+      setTimeLeft(DAY_SECONDS - capped);
+    } else {
+      setSessionElapsed(0);
+      setSessionBalance(0);
+      setTimeLeft(DAY_SECONDS);
     }
-  }, [balanceBase, getLiveBalance, animatedBalance]);
+  };
 
-  // keep a ref to latest miningData so the interval can read fresh values
-  const miningDataRef = useRef(miningData);
-  useEffect(() => {
-    miningDataRef.current = miningData;
-  }, [miningData]);
+  compute();
+  interval = setInterval(compute, 1000);
 
-  useEffect(() => {
-    let id: number | null = null;
+  return () => clearInterval(interval);
+}, [perSecond]);
 
-    const compute = () => {
-      const md = miningDataRef.current;
-      const lastStart = md?.lastStart ?? null;
 
-      const startMs = lastStart
-        ? typeof (lastStart as any).toMillis === "function"
-          ? (lastStart as any).toMillis()
-          : Number(lastStart)
-        : 0;
-
-      if (md && md.miningActive && startMs > 0) {
-        const now = Date.now();
-        const elapsedSeconds = Math.max(0, Math.floor((now - startMs) / 1000));
-        const capped = Math.min(elapsedSeconds, DAY_SECONDS);
-        const sessionGain = capped * (DAILY_MAX / DAY_SECONDS);
-
-        setSessionElapsed(capped);
-        setSessionBalance(sessionGain);
-        setTimeLeft(Math.max(0, DAY_SECONDS - capped));
-      } else {
-        setSessionElapsed(0);
-        setSessionBalance(0);
-        setTimeLeft(DAY_SECONDS);
-      }
-    };
-
-    compute();
-    id = global.setInterval(compute, 1000) as unknown as number;
-
-    return () => {
-      if (id !== null) {
-        clearInterval(id);
-      }
-    };
-  }, []);
-
-  // spin animation
+  /* ---------- Spin animation ---------- */
   const spinValue = useRef(new Animated.Value(0)).current;
-  const spinAnimRef = useRef<any>(null);
+  const spinAnimRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     if (!spinAnimRef.current) {
       spinAnimRef.current = Animated.loop(
-        Animated.timing(spinValue, {
-          toValue: 1,
-          duration: 3500,
-          useNativeDriver: true,
-        })
+        Animated.timing(spinValue, { toValue: 1, duration: 3500, useNativeDriver: true })
       );
     }
 
-    if (miningActive) {
-      spinAnimRef.current.start();
-    } else {
-      try {
-        spinAnimRef.current.stop();
-      } catch (e) {}
+    if (miningActive) spinAnimRef.current.start();
+    else {
+      try { spinAnimRef.current.stop(); } catch {}
       spinValue.setValue(0);
     }
 
-    return () => {
-      if (spinAnimRef.current) {
-        try {
-          spinAnimRef.current.stop();
-        } catch (e) {}
-      }
-    };
+    return () => { try { spinAnimRef.current?.stop(); } catch {} };
   }, [miningActive, spinValue]);
 
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
+  const spin = spinValue.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
 
-  // start/stop handlers (with optimistic UI)
+  /* ---------- Start / Stop handlers ---------- */
   const handleStartStop = async () => {
     const user = auth.currentUser;
     if (!user) return router.push("/auth/login" as any);
@@ -521,13 +327,12 @@ export default function MiningDashboard() {
       } else {
         await stop();
       }
-    } catch (err) {
+    } catch {
       setIsStarting(false);
       Alert.alert("Error", "Couldn't toggle mining.");
     }
   };
 
-  // claim handler
   const handleClaim = async () => {
     const user = auth.currentUser;
     if (!user) return router.push("/auth/login" as any);
@@ -537,33 +342,29 @@ export default function MiningDashboard() {
       const reward = await claim();
       setIsClaiming(false);
       Alert.alert("Claimed", `${reward?.toFixed(4) ?? 0} VAD`);
-    } catch (err) {
+    } catch {
       setIsClaiming(false);
       Alert.alert("Error", "Claim failed.");
     }
   };
 
-  // Realtime Database listener for /news (ordered by key latest-first)
+  /* ---------- News listener ---------- */
   useEffect(() => {
     if (!app) return;
-
-    let mounted = true;
     const db = getDatabase(app);
     const newsRef = dbRef(db, "news");
+    let mounted = true;
 
     const unsub = onValue(
       newsRef,
       (snap) => {
         if (!mounted) return;
         const value = snap.val();
-        if (!value) {
-          setNews([]);
-          return;
-        }
+        if (!value) return setNews([]);
 
         try {
-          const arr = Object.keys(value)
-            .map((k) => ({ id: k, ...(value[k] as any) }))
+          const arr: NewsItem[] = Object.keys(value)
+            .map((k) => ({ id: k, ...(value[k] as Omit<NewsItem, "id">) }))
             .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
           setNews(arr);
         } catch (e) {
@@ -577,15 +378,8 @@ export default function MiningDashboard() {
       }
     );
 
-    return () => {
-      mounted = false;
-      try {
-        unsub();
-      } catch (e) {
-        // ignore
-      }
-    };
-  }, [app]);
+    return () => { mounted = false; try { unsub(); } catch {} };
+  }, []);
 
   if (isLoading) {
     return (
@@ -595,46 +389,29 @@ export default function MiningDashboard() {
     );
   }
 
-  // Animated total balance component
+  /* ---------- Animated balance component ---------- */
   const AnimatedBalance = () => {
     const [val, setVal] = useState(0);
     const listenerIdRef = useRef<string | number | null>(null);
 
     useEffect(() => {
-      listenerIdRef.current = animatedBalance.addListener(({ value }) => {
-        setVal(Number(value));
-      });
-
+      listenerIdRef.current = animatedBalance.addListener(({ value }) => setVal(Number(value)));
       return () => {
         if (listenerIdRef.current !== null) {
-          try {
-            animatedBalance.removeListener(listenerIdRef.current as string);
-          } catch {
-            try {
-              (animatedBalance as any).removeAllListeners();
-            } catch {}
-          }
+          try { animatedBalance.removeListener(listenerIdRef.current as string); }
+          catch { try { (animatedBalance as any).removeAllListeners(); } catch {} }
         }
       };
     }, []);
 
     return (
-      <MotiText
-        from={{ opacity: 0, translateY: 8 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ duration: 360 }}
-        style={styles.balance}
-      >
+      <MotiText from={{ opacity: 0, translateY: 8 }} animate={{ opacity: 1, translateY: 0 }} transition={{ duration: 360 }} style={styles.balance}>
         {val.toFixed(4)} <Text style={styles.vadText}>VAD</Text>
       </MotiText>
     );
   };
 
-  // session progress
-  const progress = useMemo(() => {
-    if (!miningActive) return 0;
-    return Math.min(1, sessionElapsed / DAY_SECONDS);
-  }, [miningActive, sessionElapsed]);
+  const progress = useMemo(() => miningActive ? Math.min(1, sessionElapsed / DAY_SECONDS) : 0, [miningActive, sessionElapsed]);
 
   const formatTime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -645,25 +422,13 @@ export default function MiningDashboard() {
 
   return (
     <View style={styles.container}>
-      {/* TOP NAV (floating) */}
+      {/* Top Nav */}
       <View style={styles.topNav}>
         <Pressable onPress={() => router.push("/(tabs)/profile")}>
           <View style={styles.profileCircle}>
-            {userProfile?.avatarUrl ? (
-              <Image
-                source={
-                  typeof userProfile.avatarUrl === "string"
-                    ? { uri: userProfile.avatarUrl }
-                    : undefined
-                }
-                style={styles.avatar}
-              />
-            ) : (
-              <Ionicons name="person" size={22} color="#fff" />
-            )}
+            {userProfile?.avatarUrl ? <Image source={{ uri: userProfile.avatarUrl }} style={styles.avatar} /> : <Ionicons name="person" size={22} color="#fff" />}
           </View>
         </Pressable>
-
         <Pressable onPress={() => router.push("/(tabs)/explore")}>
           <View style={styles.chatCircle}>
             <Ionicons name="chatbubble-ellipses-outline" size={22} color="#fff" />
@@ -675,15 +440,15 @@ export default function MiningDashboard() {
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 140 }} // keep extra room for fixed banner
+        contentContainerStyle={{ paddingBottom: 140 }} // extra space for fixed banner
       >
-        {/* Header gradient card (small) */}
+        {/* Header Card */}
         <LinearGradient colors={["#22163a", "#0e0916"]} style={styles.headerCard}>
           <MotiText style={styles.headerTitle}>VAD Mining</MotiText>
           <Text style={styles.headerSub}>Earn up to {DAILY_MAX} VAD every 24 hours</Text>
         </LinearGradient>
 
-        {/* CURRENT BALANCE (open background) */}
+        {/* Current Balance */}
         <View style={styles.currentWrap}>
           <Text style={styles.currentLabel}>Current Balance</Text>
           <AnimatedBalance />
@@ -724,7 +489,7 @@ export default function MiningDashboard() {
           </Pressable>
         </View>
 
-        {/* SESSION BLOCK */}
+        {/* Session Card */}
         <View style={styles.sessionCard}>
           <View style={styles.sessionTop}>
             <View>
@@ -739,19 +504,18 @@ export default function MiningDashboard() {
             </Animated.View>
           </View>
 
-          {/* progress + meta */}
+          {/* Progress Bar */}
           <View style={styles.progressWrap}>
             <View style={styles.progressBg}>
               <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
             </View>
-
             <View style={styles.progressMeta}>
               <Text style={styles.progressText}>{formatTime(timeLeft)} left</Text>
               <Text style={styles.progressText}>{(progress * 100).toFixed(1)}%</Text>
             </View>
           </View>
 
-          {/* Info box */}
+          {/* Info Box */}
           <View style={styles.infoBox}>
             <Text style={styles.infoTitle}>About VAD mining</Text>
             <Text style={styles.infoBody}>
@@ -761,25 +525,22 @@ export default function MiningDashboard() {
           </View>
         </View>
 
-        {/* Utilities row (inside scroll) */}
+        {/* Utilities Row */}
         <View style={styles.utilityRow}>
           <Pressable style={styles.utilityItem} onPress={() => setDailyOpen(true)}>
             <Text style={{ color: "#fff" }}>Daily Claim</Text>
           </Pressable>
-
           <Pressable style={styles.utilityItem} onPress={() => setBoostOpen(true)}>
             <Text style={{ color: "#fff" }}>Boost</Text>
           </Pressable>
-
           <Pressable style={styles.utilityItem} onPress={() => setWatchOpen(true)}>
             <Text style={{ color: "#fff" }}>Watch & Earn</Text>
           </Pressable>
         </View>
 
-        {/* News & Updates — exactly once at the bottom of the scroll */}
+        {/* News & Updates */}
         <View style={styles.newsSection}>
           <Text style={styles.newsHeader}>News & Updates</Text>
-
           {news.length === 0 ? (
             <View style={styles.newsEmptyCard}>
               <Text style={styles.newsEmptyText}>No recent updates — check back soon.</Text>
@@ -794,16 +555,13 @@ export default function MiningDashboard() {
                     <Ionicons name="newspaper-outline" size={22} color="#8b8fb2" />
                   </View>
                 )}
-
                 <View style={styles.newsTextWrap}>
                   <Text style={styles.newsTitleText}>{n.title}</Text>
-
-                  {n.subtitle ? (
+                  {n.subtitle && (
                     <Text style={styles.newsBodyText} numberOfLines={2}>
                       {n.subtitle}
                     </Text>
-                  ) : null}
-
+                  )}
                   <Text style={styles.newsTimeText}>
                     {n.timestamp ? timeAgoFromUnix(Number(n.timestamp)) : ""}
                   </Text>
@@ -813,11 +571,11 @@ export default function MiningDashboard() {
           )}
         </View>
 
-        {/* Bottom spacer to prevent content being hidden behind the fixed banner */}
+        {/* Bottom Spacer */}
         <View style={{ height: Platform.OS === "ios" ? 160 : 140 }} />
       </ScrollView>
 
-      {/* FIXED Banner — truly outside ScrollView now */}
+      {/* Fixed Banner */}
       <View
         style={{
           position: "absolute",
@@ -833,17 +591,15 @@ export default function MiningDashboard() {
         </View>
       </View>
 
-      {/* Modals — outside ScrollView */}
+      {/* Modals */}
       {dailyOpen && <DailyClaim visible={dailyOpen} onClose={() => setDailyOpen(false)} />}
-
       {boostOpen && <Boost visible={boostOpen} onClose={() => setBoostOpen(false)} />}
-
       {watchOpen && <WatchEarn visible={watchOpen} onClose={() => setWatchOpen(false)} />}
     </View>
   );
 }
 
-/* helper: shows relative time... */
+/* ---------- helper: relative time ---------- */
 function timeAgoFromUnix(ts: number) {
   if (!ts || Number.isNaN(Number(ts))) return "";
   const t = ts > 1e12 ? ts : ts * 1000;
@@ -853,3 +609,4 @@ function timeAgoFromUnix(ts: number) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
+
