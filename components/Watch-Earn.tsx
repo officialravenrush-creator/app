@@ -1,4 +1,4 @@
-// app/(tabs)/Watch-earn.tsx
+// app/components/Watch-earn.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
@@ -11,6 +11,7 @@ import {
 import { auth, db } from "../firebase/firebaseConfig";
 import { claimWatchEarnReward } from "../firebase/user";
 import { doc, onSnapshot } from "firebase/firestore";
+import { showRewardedAd } from "../components/RewardedAd";
 
 export default function WatchEarn({ visible = false, onClose }: any) {
   const user = auth?.currentUser ?? null;
@@ -18,20 +19,19 @@ export default function WatchEarn({ visible = false, onClose }: any) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [completed, setCompleted] = useState(false);
-  const [timer, setTimer] = useState(0);
   const [stats, setStats] = useState({
     totalWatched: 0,
     totalEarned: 0,
   });
 
-  // 🚫 If modal opens while logged out = close instantly (no crash)
+  // 🚫 Close if logged out
   useEffect(() => {
     if (visible && !user) {
       onClose?.();
     }
   }, [visible, user]);
 
-  // 🔥 Real-time Firebase stats (fully guarded)
+  // 🔥 Firebase stats
   useEffect(() => {
     if (!user) return;
 
@@ -41,52 +41,42 @@ export default function WatchEarn({ visible = false, onClose }: any) {
       (snap) => {
         if (!snap.exists()) return;
         const data = snap.data() ?? {};
-
         const watch = data.watchEarn ?? {};
+
         setStats({
           totalWatched: watch.totalWatched ?? 0,
           totalEarned: watch.totalEarned ?? 0,
         });
       },
-      () => {} // silent error
+      () => {}
     );
 
     return () => unsub();
   }, [user]);
 
-  // 🕑 Countdown
-  useEffect(() => {
-    if (!loading || timer === 0) return;
-    const iv = setInterval(() => {
-      setTimer((t) => (t > 0 ? t - 1 : 0));
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [loading, timer]);
-
-  // 🎥 Ad logic (safe)
+  // 🎥 Real rewarded ad flow
   const handleWatch = useCallback(async () => {
     if (!user || loading) return;
 
-    setLoading(true);
-    setCompleted(false);
-    setMessage("");
-    setTimer(6);
+    try {
+      setLoading(true);
+      setCompleted(false);
+      setMessage("");
 
-    // fake ad countdown
-    setTimeout(async () => {
-      try {
-        const reward = await claimWatchEarnReward(user.uid);
+      // Show rewarded ad
+      await showRewardedAd();
 
-        const amt = typeof reward === "number" ? reward : 0;
-        setMessage(`+${amt.toFixed(2)} VAD credited!`);
-        setCompleted(true);
-      } catch (e) {
-        setMessage("Reward failed. Try again.");
-      } finally {
-        setLoading(false);
-        setTimer(0);
-      }
-    }, 6000);
+      // ✅ After ad is completed
+      const reward = await claimWatchEarnReward(user.uid);
+
+      const amt = typeof reward === "number" ? reward : 0;
+      setMessage(`+${amt.toFixed(2)} VAD credited!`);
+      setCompleted(true);
+    } catch (e) {
+      setMessage("Ad not completed or failed.");
+    } finally {
+      setLoading(false);
+    }
   }, [user, loading]);
 
   const closeIfIdle = useCallback(() => {
@@ -118,11 +108,8 @@ export default function WatchEarn({ visible = false, onClose }: any) {
               <Text style={styles.statValue}>{totalWatched}</Text>
               <Text style={styles.statLabel}>Ads Watched</Text>
             </View>
-
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {totalEarned.toFixed(2)}
-              </Text>
+              <Text style={styles.statValue}>{totalEarned.toFixed(2)}</Text>
               <Text style={styles.statLabel}>VAD Earned</Text>
             </View>
           </View>
@@ -134,10 +121,10 @@ export default function WatchEarn({ visible = false, onClose }: any) {
               style={[styles.watchBtn, loading && { opacity: 0.6 }]}
             >
               {loading ? (
-                <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flexDirection: "row" }}>
                   <ActivityIndicator />
-                  <Text style={styles.watchText}>
-                    Watching ({timer}s)
+                  <Text style={[styles.watchText, { marginLeft: 10 }]}>
+                    Loading ad...
                   </Text>
                 </View>
               ) : (
@@ -164,6 +151,9 @@ export default function WatchEarn({ visible = false, onClose }: any) {
     </Modal>
   );
 }
+
+// styles stay unchanged
+
 
 const styles = StyleSheet.create({
   overlay: {

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { useInterstitialAd } from "react-native-google-mobile-ads";
 import { auth } from "../firebase/firebaseConfig";
 import { claimBoostReward } from "../firebase/user";
 import { useMining } from "../hooks/useMining";
@@ -28,13 +29,26 @@ function timeLeft(ms: number) {
 
 export default function Boost({ visible, onClose }: BoostProps) {
   const { boost } = useMining();
+
+  // ✅ Freeze boost to avoid re-hook crashes
+  const boostSafe = useMemo(() => boost ?? null, [boost]);
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [timer, setTimer] = useState(0);
   const [cooldownMs, setCooldownMs] = useState(0);
 
-  // mounted ref to avoid setState after unmount
   const mountedRef = useRef(true);
+
+  // ✅ SAFE Ad Hook Placement (TOP LEVEL ALWAYS)
+  const adUnitId = __DEV__
+    ? "ca-app-pub-3940256099942544/1033173712"
+    : "YOUR_REAL_AD_ID";
+
+  const { isLoaded, isClosed, load, show } = useInterstitialAd(adUnitId, {
+    requestNonPersonalizedAdsOnly: true,
+  });
+
+  // cleanup guard
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -42,127 +56,94 @@ export default function Boost({ visible, onClose }: BoostProps) {
     };
   }, []);
 
-  // if user is not authenticated when opening, close modal
   useEffect(() => {
-    if (!auth.currentUser && visible) {
-      onClose?.();
-    }
-    // only when visibility toggles
+    if (!auth.currentUser && visible) onClose?.();
   }, [visible, onClose]);
 
-  const usedToday = boost?.usedToday ?? 0;
+  const usedToday = boostSafe?.usedToday ?? 0;
   const remaining = Math.max(0, 3 - usedToday);
 
-  // ----- DAILY RESET TIMER (robust parsing of lastReset) -----
+  // ✅ Daily timer
   useEffect(() => {
-    if (!boost?.lastReset) {
+    if (!boostSafe?.lastReset) {
       setCooldownMs(0);
       return;
     }
 
-    // normalize last timestamp into milliseconds (safe)
     let lastMs = 0;
     try {
-      if ((boost.lastReset as any)?.toMillis && typeof (boost.lastReset as any).toMillis === "function") {
-        // Firestore Timestamp
-        lastMs = (boost.lastReset as Timestamp).toMillis();
+      if ((boostSafe.lastReset as any)?.toMillis) {
+        lastMs = (boostSafe.lastReset as Timestamp).toMillis();
       } else {
-        // attempt numeric coercion
-        const n = Number(boost.lastReset);
+        const n = Number(boostSafe.lastReset);
         lastMs = Number.isFinite(n) ? n : 0;
       }
-    } catch (e) {
+    } catch {
       lastMs = 0;
     }
 
-    const DAY = 24 * 3600 * 1000;
-    const diff = Date.now() - lastMs;
-    const remainingMs = Math.max(0, DAY - diff);
-    setCooldownMs(remainingMs);
-
+    const DAY = 86400000;
     const iv = setInterval(() => {
       if (!mountedRef.current) return;
-      const nowRemain = Math.max(0, DAY - (Date.now() - lastMs));
-      setCooldownMs(nowRemain);
-    }, 1000 * 30); // update every 30s
+      const remain = Math.max(0, DAY - (Date.now() - lastMs));
+      setCooldownMs(remain);
+    }, 30000);
 
     return () => clearInterval(iv);
-  }, [boost?.lastReset]);
+  }, [boostSafe?.lastReset]);
 
-  // ----- FAKE AD COUNTDOWN -----
+  // ✅ Run reward only when ad closes
+  const runReward = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user || !mountedRef.current) return;
+
+      const reward = await claimBoostReward(user.uid);
+
+      if (!mountedRef.current) return;
+
+      if (reward === 0) {
+        setMessage("Boost limit reached.");
+      } else {
+        setMessage(`+${reward.toFixed(1)} VAD added!`);
+      }
+    } catch (err) {
+      console.error("Boost error:", err);
+      if (mountedRef.current) setMessage("Boost failed.");
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  };
+
+  // ✅ Trigger reward only after ad is closed
   useEffect(() => {
-    if (!loading || timer <= 0) return;
-    const iv = setInterval(() => {
-      if (!mountedRef.current) return;
-      setTimer((t) => (t > 0 ? t - 1 : 0));
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [loading, timer]);
+    if (isClosed && loading) {
+      runReward();
+    }
+  }, [isClosed, loading]);
 
-  // ----- CLAIM BOOST -----
   const handleWatchAd = async () => {
-    // quick guards
     if (!auth.currentUser) {
-      setMessage("You must be signed in to boost.");
+      setMessage("Login required.");
       return;
     }
-    if (loading) return;
 
-    if (remaining <= 0) {
-      setMessage("Daily boost limit reached (3/3).");
-      return;
-    }
+    if (remaining <= 0 || loading) return;
 
     setLoading(true);
     setMessage("");
-    setTimer(5); // simulated ad countdown
 
-    // simulate ad playing for 5s — handle race conditions with mountedRef and auth
-    const adTimeout = setTimeout(async () => {
-      try {
-        if (!mountedRef.current) return;
-        const user = auth.currentUser;
-        if (!user) {
-          // user signed out during ad
-          if (mountedRef.current) {
-            setMessage("You were signed out. Please log in again.");
-          }
-          return;
-        }
+    if (!isLoaded) {
+      load();
+      return;
+    }
 
-        const reward = await claimBoostReward(user.uid);
-
-        if (!mountedRef.current) return;
-
-        if (reward === 0) {
-          setMessage("Boost limit reached for today.");
-        } else {
-          setMessage(`+${reward.toFixed(1)} VAD added to your balance!`);
-        }
-      } catch (err) {
-        console.error("Boost error:", err);
-        if (mountedRef.current) setMessage("Boost failed. Try again.");
-      } finally {
-        if (mountedRef.current) {
-          setLoading(false);
-          setTimer(0);
-        }
-      }
-    }, 5000);
-
-    // cleanup ad timeout if component unmounts or modal closes early
-    const cleanup = () => {
-      clearTimeout(adTimeout);
-    };
-
-    // if modal visibility changes or component unmounts, clear timeout
-    // (we attach to mountedRef cleanup above; still call cleanup immediately if not mounted)
-    if (!mountedRef.current) cleanup();
+    show();
   };
 
   const progressLabel = useMemo(() => {
     if (remaining === 0) return `Next reset in ${timeLeft(cooldownMs)}`;
-    return `${remaining} boost${remaining === 1 ? "" : "s"} remaining today`;
+    return `${remaining} boosts remaining today`;
   }, [remaining, cooldownMs]);
 
   return (
@@ -170,8 +151,9 @@ export default function Boost({ visible, onClose }: BoostProps) {
       <View style={styles.overlay}>
         <View style={styles.card}>
           <Text style={styles.title}>⚡ Boost Earnings</Text>
+
           <Text style={styles.sub}>
-            Watch a short ad to instantly boost your mining balance.
+            Watch a short ad to boost your balance.
           </Text>
 
           <View style={styles.rewardBox}>
@@ -183,7 +165,6 @@ export default function Boost({ visible, onClose }: BoostProps) {
             {[0, 1, 2].map((i) => (
               <View
                 key={i}
-                // apply margin to space dots without relying on `gap`
                 style={[
                   styles.useDot,
                   i < usedToday && styles.useDotActive,
@@ -201,18 +182,9 @@ export default function Boost({ visible, onClose }: BoostProps) {
               (loading || remaining === 0) && { opacity: 0.5 },
             ]}
           >
-            {loading ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color="#fff" />
-                <Text style={[styles.watchText, { marginLeft: 10 }]}>
-                  Watching... ({timer}s)
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.watchText}>
-                {remaining === 0 ? "No Boosts Left" : "Watch Ad"}
-              </Text>
-            )}
+            <Text style={styles.watchText}>
+              {loading ? "Loading ad..." : remaining === 0 ? "No Boosts Left" : "Watch Ad"}
+            </Text>
           </Pressable>
 
           {message ? <Text style={styles.message}>{message}</Text> : null}

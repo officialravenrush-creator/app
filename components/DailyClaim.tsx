@@ -1,4 +1,5 @@
 // components/DailyClaim.tsx
+// components/DailyClaim.tsx
 import {
   View,
   Text,
@@ -12,6 +13,7 @@ import { auth } from "../firebase/firebaseConfig";
 import { claimDailyReward } from "../firebase/user";
 import { useMining } from "../hooks/useMining";
 import { Timestamp } from "firebase/firestore";
+import { useInterstitialAd } from "react-native-google-mobile-ads";
 
 const STREAK_REWARDS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 2.0];
 
@@ -25,10 +27,19 @@ function fmtTimeLeft(ms: number) {
 
 export default function DailyClaim({ visible, onClose }: any) {
   const { dailyClaim } = useMining();
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [timer, setTimer] = useState(0);
   const [cooldownMs, setCooldownMs] = useState(0);
+
+  // ✅ SAFE AD HOOK PLACEMENT (top-level only)
+  const adUnitId = __DEV__
+    ? "ca-app-pub-3940256099942544/1033173712"
+    : "ca-app-pub-4533962949749202/2761859275";
+
+  const { isLoaded, isClosed, load, show } = useInterstitialAd(adUnitId, {
+    requestNonPersonalizedAdsOnly: true,
+  });
 
   // prevent setState after unmount
   const mountedRef = useRef(true);
@@ -53,7 +64,6 @@ export default function DailyClaim({ visible, onClose }: any) {
       return;
     }
 
-    // normalize Firestore timestamp
     let lastMs = 0;
     try {
       if ((dailyClaim.lastClaim as any)?.toMillis) {
@@ -67,82 +77,68 @@ export default function DailyClaim({ visible, onClose }: any) {
     }
 
     const DAY = 24 * 3600 * 1000;
-    const diff = Date.now() - lastMs;
-    const remain = Math.max(0, DAY - diff);
-    setCooldownMs(remain);
 
     const iv = setInterval(() => {
       if (!mountedRef.current) return;
-      const nowRemain = Math.max(0, DAY - (Date.now() - lastMs));
-      setCooldownMs(nowRemain);
+      const remain = Math.max(0, DAY - (Date.now() - lastMs));
+      setCooldownMs(remain);
     }, 30_000);
 
     return () => clearInterval(iv);
   }, [dailyClaim?.lastClaim]);
 
-  // fake ad countdown
-  useEffect(() => {
-    if (!loading || timer <= 0) return;
-    const iv = setInterval(() => {
-      if (!mountedRef.current) return;
-      setTimer((t) => (t > 0 ? t - 1 : 0));
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [loading, timer]);
+  // ✅ run reward ONLY after ad closes
+  const runReward = async () => {
+    try {
+      const u = auth.currentUser;
+      if (!u || !mountedRef.current) return;
 
-  const handleClaim = async () => {
+      const reward = await claimDailyReward(u.uid);
+
+      if (!mountedRef.current) return;
+
+      if (reward === 0) {
+        setMessage("Already claimed for today.");
+      } else {
+        setMessage(`+${reward.toFixed(1)} VAD added to your balance!`);
+      }
+    } catch (err) {
+      console.error("claimDailyReward error:", err);
+      if (mountedRef.current) setMessage("Claim failed. Try again.");
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  };
+
+  // ✅ trigger reward when ad closes
+  useEffect(() => {
+    if (isClosed && loading) {
+      runReward();
+    }
+  }, [isClosed, loading]);
+
+  const handleClaim = () => {
     const user = auth.currentUser;
     if (!user) {
       setMessage("Please log in to claim.");
       return;
     }
-    if (cooldownMs > 0) {
-      setMessage("Already claimed — come back later.");
+
+    if (cooldownMs > 0 || loading) return;
+
+    setMessage("");
+    setLoading(true);
+
+    if (!isLoaded) {
+      load();
       return;
     }
 
-    setLoading(true);
-    setMessage("");
-    setTimer(5);
-
-    const timeoutId = setTimeout(async () => {
-      try {
-        if (!mountedRef.current) return;
-        const u = auth.currentUser;
-        if (!u) {
-          if (mountedRef.current) {
-            setMessage("You were signed out. Try again.");
-          }
-          return;
-        }
-
-        const reward = await claimDailyReward(u.uid);
-
-        if (!mountedRef.current) return;
-
-        if (reward === 0) {
-          setMessage("Already claimed for today.");
-        } else {
-          setMessage(`+${reward.toFixed(1)} VAD added to your balance!`);
-        }
-      } catch (err) {
-        console.error("claimDailyReward error:", err);
-        if (mountedRef.current) setMessage("Claim failed. Try again.");
-      } finally {
-        if (mountedRef.current) {
-          setLoading(false);
-          setTimer(0);
-        }
-      }
-    }, 5000);
-
-    // cleanup if unmounted
-    if (!mountedRef.current) {
-      clearTimeout(timeoutId);
-    }
+    show();
   };
 
   const streak = dailyClaim?.streak ?? 0;
+
   const progressLabel = useMemo(() => {
     return cooldownMs > 0 ? fmtTimeLeft(cooldownMs) : "Available now";
   }, [cooldownMs]);
@@ -151,13 +147,11 @@ export default function DailyClaim({ visible, onClose }: any) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
-          {/* Title */}
           <Text style={styles.title}>🔥 Daily Check-In</Text>
           <Text style={styles.sub}>
             Claim every 24 hours. Keep streaks to increase rewards.
           </Text>
 
-          {/* Reward Grid */}
           <View style={styles.grid}>
             {STREAK_REWARDS.map((r, i) => {
               const day = i + 1;
@@ -168,7 +162,6 @@ export default function DailyClaim({ visible, onClose }: any) {
                   style={[
                     styles.dayBox,
                     claimed && styles.dayClaimed,
-                    // spacing hack to replace gap
                     (day % 3 !== 0) && { marginRight: 12 },
                     day > 3 && { marginTop: 12 },
                   ]}
@@ -183,13 +176,11 @@ export default function DailyClaim({ visible, onClose }: any) {
             })}
           </View>
 
-          {/* Meta */}
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>Streak: {streak} day(s)</Text>
             <Text style={styles.metaText}>Next: {progressLabel}</Text>
           </View>
 
-          {/* Claim Button */}
           <Pressable
             onPress={handleClaim}
             disabled={loading || cooldownMs > 0}
@@ -202,7 +193,7 @@ export default function DailyClaim({ visible, onClose }: any) {
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <ActivityIndicator color="#000" />
                 <Text style={[styles.claimText, { marginLeft: 10 }]}>
-                  Watching... ({timer}s)
+                  Loading ad...
                 </Text>
               </View>
             ) : (
@@ -222,6 +213,9 @@ export default function DailyClaim({ visible, onClose }: any) {
     </Modal>
   );
 }
+
+// styles stay the same
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
