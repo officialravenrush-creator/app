@@ -1,4 +1,5 @@
 // app/(tabs)/index.tsx
+// app/(tabs)/index.tsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import {
   View,
@@ -10,11 +11,10 @@ import {
   Animated,
   Dimensions,
   ScrollView,
-  TouchableOpacity,
   Image,
   Platform,
 } from "react-native";
-import { MotiView, MotiText } from "moti";
+import { MotiText } from "moti";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,414 +26,12 @@ import Boost from "../../components/Boost";
 import WatchEarn from "../../components/Watch-Earn";
 import AdBanner from "../../components/AdBanner";
 
-
-
+/* ---------- constants (must be above styles because styles uses width) ---------- */
 const { width } = Dimensions.get("window");
 const DAY_SECONDS = 24 * 3600;
 const DAILY_MAX = 4.8;
 
-export default function MiningDashboard() {
-  const router = useRouter();
-  const {
-    miningData,
-    userProfile,
-    isLoading,
-    start,
-    stop,
-    claim,
-    getLiveBalance,
-  } = useMining();
-
-  // Animated balance (total + live session)
-  const animatedBalance = useRef(new Animated.Value(0)).current;
-  const miningActive = miningData?.miningActive ?? false;
-  const balanceBase = miningData?.balance ?? 0;
-
-  const [boostOpen, setBoostOpen] = useState(false);
-const [dailyOpen, setDailyOpen] = useState(false);
-const [watchOpen, setWatchOpen] = useState(false);
-
-
-  // session live values (computed every second)
-  const [sessionBalance, setSessionBalance] = useState<number>(0);
-  const [sessionElapsed, setSessionElapsed] = useState<number>(0); // seconds
-  const [timeLeft, setTimeLeft] = useState<number>(DAY_SECONDS);
-  const [news, setNews] = useState<any[]>([]);
-  const [isClaiming, setIsClaiming] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
-
-  // compute per-second rate
-  const perSecond = miningActive ? DAILY_MAX / DAY_SECONDS : 0;
-  const perMinute = perSecond * 60;
-  const perHour = perMinute * 60;
-
-  // Animate displayed balance whenever getLiveBalance or base changes
-  useEffect(() => {
-    const toVal = Number(getLiveBalance() ?? balanceBase);
-    Animated.timing(animatedBalance, {
-      toValue: toVal,
-      duration: 600,
-      useNativeDriver: false,
-    }).start();
-  }, [getLiveBalance, balanceBase]);
-
-  // Update session values every second (live accumulation)
-// Update session values every second (live accumulation)
-useEffect(() => {
-  let t: any = null;
-
-  const compute = () => {
-    const lastStart = miningData?.lastStart ?? null;
-
-    // Normalize lastStart into a clean number (ms)
-    const startMs = lastStart
-      ? typeof (lastStart as any).toMillis === "function"
-        ? (lastStart as any).toMillis()
-        : Number(lastStart)
-      : 0;
-
-    if (miningData && miningData.miningActive && startMs > 0) {
-      const now = Date.now();
-      const elapsedSeconds = Math.max(
-        0,
-        Math.floor((now - startMs) / 1000)
-      );
-
-      const capped = Math.min(elapsedSeconds, DAY_SECONDS);
-      const sessionGain = capped * (DAILY_MAX / DAY_SECONDS);
-
-      setSessionElapsed(capped);
-      setSessionBalance(sessionGain);
-      setTimeLeft(Math.max(0, DAY_SECONDS - capped));
-    } else {
-      setSessionElapsed(0);
-      setSessionBalance(0);
-      setTimeLeft(DAY_SECONDS);
-    }
-  };
-
-  compute();
-  t = setInterval(compute, 1000);
-
-  return () => {
-    if (t) clearInterval(t);
-  };
-}, [miningData]);
-
-
-  // spin animation
-  const spinValue = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (miningActive) {
-      Animated.loop(
-        Animated.timing(spinValue, {
-          toValue: 1,
-          duration: 3500,
-          useNativeDriver: true,
-        })
-      ).start();
-    } else {
-      spinValue.stopAnimation();
-      spinValue.setValue(0);
-    }
-  }, [miningActive]);
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-
-  // start/stop handlers (with optimistic UI)
-  const handleStartStop = async () => {
-    const user = auth.currentUser;
-    if (!user) return router.push("/auth/login" as any);
-
-    try {
-      if (!miningActive) {
-        setIsStarting(true);
-        await start();
-        setIsStarting(false);
-      } else {
-        await stop();
-      }
-    } catch (err) {
-      setIsStarting(false);
-      Alert.alert("Error", "Couldn't toggle mining.");
-    }
-  };
-
-  // claim handler
-  const handleClaim = async () => {
-    const user = auth.currentUser;
-    if (!user) return router.push("/auth/login" as any);
-
-    try {
-      setIsClaiming(true);
-      const reward = await claim();
-      setIsClaiming(false);
-      Alert.alert("Claimed", `${reward?.toFixed(4) ?? 0} VAD`);
-    } catch (err) {
-      setIsClaiming(false);
-      Alert.alert("Error", "Claim failed.");
-    }
-  };
-
-  // Realtime Database listener for /news (ordered by key latest-first)
- useEffect(() => {
-  if (!app) return;
-
-  const db = getDatabase(app);
-  const newsRef = dbRef(db, "news");
-
-  const unsub = onValue(newsRef, (snap) => {
-    const value = snap.val() ?? {};
-    const arr = Object.keys(value)
-      .map((k) => ({ id: k, ...(value[k] as any) }))
-      .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
-
-    setNews(arr);
-  });
-
-  return () => unsub();
-}, []);
-
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#8B5CF6" />
-      </View>
-    );
-  }
-
-  // Animated total balance component
-  const AnimatedBalance = () => {
-    const [val, setVal] = useState(0);
-    useEffect(() => {
-      const id = animatedBalance.addListener(({ value }) => {
-        setVal(Number(value));
-      });
-      return () => animatedBalance.removeListener(id);
-    }, []);
-
-    return (
-      <MotiText
-        from={{ opacity: 0, translateY: 8 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ duration: 360 }}
-        style={styles.balance}
-      >
-        {val.toFixed(4)} <Text style={styles.vadText}>VAD</Text>
-      </MotiText>
-    );
-  };
-
-  // session progress
-  const progress = useMemo(() => {
-    if (!miningActive) return 0;
-    return Math.min(1, sessionElapsed / DAY_SECONDS);
-  }, [miningActive, sessionElapsed]);
-
-  const formatTime = (secs: number) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    return `${h}h ${m}m ${s}s`;
-  };
-
-  return (
-    <View style={styles.container}>
-      {/* TOP NAV (floating) */}
-      <View style={styles.topNav}>
-        <Pressable onPress={() => router.push("/(tabs)/profile")}>
-          <View style={styles.profileCircle}>
-            {userProfile?.avatarUrl ? (
-              <Image source={{ uri: userProfile.avatarUrl }} style={styles.avatar} />
-            ) : (
-              <Ionicons name="person" size={22} color="#fff" />
-            )}
-          </View>
-        </Pressable>
-
-        <Pressable onPress={() => router.push("/(tabs)/explore")}>
-          <View style={styles.chatCircle}>
-            <Ionicons name="chatbubble-ellipses-outline" size={22} color="#fff" />
-          </View>
-        </Pressable>
-      </View>
-
-      {/* MAIN SCROLLABLE AREA */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header gradient card (small) */}
-        <LinearGradient colors={["#22163a", "#0e0916"]} style={styles.headerCard}>
-          <MotiText style={styles.headerTitle}>VAD Mining</MotiText>
-          <Text style={styles.headerSub}>Earn up to {DAILY_MAX} VAD every 24 hours</Text>
-        </LinearGradient>
-
-        {/* CURRENT BALANCE (open background) */}
-        <View style={styles.currentWrap}>
-          <Text style={styles.currentLabel}>Current Balance</Text>
-          <AnimatedBalance />
-        </View>
-
-        {/* Buttons Row */}
-        <View style={styles.buttonsRow}>
-          <Pressable
-            onPress={handleStartStop}
-            style={({ pressed }) => [
-              styles.halfBtn,
-              miningActive ? styles.miningActiveBtn : styles.startBtn,
-              { opacity: pressed ? 0.92 : 1 },
-            ]}
-            disabled={isStarting}
-          >
-            <View style={styles.btnInner}>
-              <MaterialIcons
-                name={miningActive ? "pause-circle" : "play-circle-fill"}
-                size={26}
-                color="#fff"
-              />
-              <Text style={styles.btnText}>
-                {miningActive ? "Mine Active" : "Start Mine"}
-              </Text>
-              <Text style={styles.smallTimer}>{miningActive ? formatTime(timeLeft) : ""}</Text>
-            </View>
-          </Pressable>
-
-          <Pressable
-            onPress={handleClaim}
-            style={({ pressed }) => [
-              styles.halfBtn,
-              styles.claimBtn,
-              { opacity: pressed ? 0.98 : 1 },
-            ]}
-            disabled={isClaiming}
-          >
-            <View style={styles.btnInner}>
-              <MaterialIcons name="redeem" size={22} color="#0F0A2A" />
-              <Text style={styles.claimBtnText}>Claim Rewards</Text>
-              <Text style={styles.claimAmountText}>{balanceBase.toFixed(4)} VAD</Text>
-            </View>
-          </Pressable>
-        </View>
-
-        {/* SESSION BLOCK */}
-        <View style={styles.sessionCard}>
-          <View style={styles.sessionTop}>
-            <View>
-              <Text style={styles.sessionLabel}>Session Mining</Text>
-              <Text style={styles.sessionValue}>
-                {sessionBalance.toFixed(4)} <Text style={styles.vadSmall}>VAD</Text>
-              </Text>
-            </View>
-
-            <Animated.View style={[styles.miningIcon, { transform: [{ rotate: spin }] }]}>
-              <Ionicons name="hardware-chip" size={24} color="#fff" />
-            </Animated.View>
-          </View>
-
-          {/* progress + meta */}
-          <View style={styles.progressWrap}>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-            </View>
-
-            <View style={styles.progressMeta}>
-              <Text style={styles.progressText}>{formatTime(timeLeft)} left</Text>
-              <Text style={styles.progressText}>{(progress * 100).toFixed(1)}%</Text>
-            </View>
-          </View>
-
-          {/* Info box */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>About VAD mining</Text>
-            <Text style={styles.infoBody}>
-              Mining accrues continuously while active, up to {DAILY_MAX} VAD per 24-hour
-              session. Claim anytime to add session rewards to your total balance.
-            </Text>
-          </View>
-        </View>
-
-        {/* ✅ REAL BANNER AD */}
-<View style={styles.bannerCard}>
-  <AdBanner />
-</View>
-
-
-        {/* Utilities row (inline components imported from components) */}
-<Pressable style={styles.utilityItem} onPress={() => setDailyOpen(true)}>
-  <Text style={{ color: "#fff" }}>Daily Claim</Text>
-</Pressable>
-
-<Pressable style={styles.utilityItem} onPress={() => setBoostOpen(true)}>
-  <Text style={{ color: "#fff" }}>Boost</Text>
-</Pressable>
-
-<Pressable style={styles.utilityItem} onPress={() => setWatchOpen(true)}>
-  <Text style={{ color: "#fff" }}>Watch & Earn</Text>
-</Pressable>
-
-{/* MODALS */}
-<DailyClaim visible={dailyOpen} onClose={() => setDailyOpen(false)} />
-<Boost visible={boostOpen} onClose={() => setBoostOpen(false)} />
-<WatchEarn visible={watchOpen} onClose={() => setWatchOpen(false)} />
-
-
-        {/* News & Updates — Premium styled */}
-        <View style={styles.newsSection}>
-          <Text style={styles.newsHeader}>News & Updates</Text>
-
-          {news.length === 0 ? (
-            <View style={styles.newsEmptyCard}>
-              <Text style={styles.newsEmptyText}>No recent updates — check back soon.</Text>
-            </View>
-          ) : (
-            news.map((n) => (
-              <View key={n.id} style={styles.newsCardItem}>
-                {n.image ? (
-                  <Image source={{ uri: n.image }} style={styles.newsImage} />
-                ) : (
-                  <View style={styles.newsImagePlaceholder}>
-                    <Ionicons name="newspaper-outline" size={22} color="#8b8fb2" />
-                  </View>
-                )}
-                <View style={styles.newsTextWrap}>
-                  <Text style={styles.newsTitleText}>{n.title}</Text>
-                  {n.subtitle ? (
-                    <Text style={styles.newsBodyText} numberOfLines={2}>
-                      {n.subtitle}
-                    </Text>
-                  ) : null}
-                  <Text style={styles.newsTimeText}>
-                    {n.timestamp ? timeAgoFromUnix(n.timestamp) : ""}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={{ height: Platform.OS === "ios" ? 120 : 120 }} />
-      </ScrollView>
-    </View>
-  );
-
-  // helper: shows relative time from unix timestamp (seconds or ms)
-  function timeAgoFromUnix(ts: number) {
-    // handle both seconds and ms
-    const t = ts > 1e12 ? ts : ts * 1000;
-    const diff = Math.floor((Date.now() - t) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  }
-}
-
+/* ---------- styles ---------- */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -777,3 +375,481 @@ const styles = StyleSheet.create({
     backgroundColor: "#060B1A",
   },
 });
+
+/* ---------- component ---------- */
+export default function MiningDashboard() {
+  const router = useRouter();
+  const {
+    miningData,
+    userProfile,
+    isLoading,
+    start,
+    stop,
+    claim,
+    getLiveBalance,
+  } = useMining();
+
+  // Animated balance (total + live session)
+  const animatedBalance = useRef(new Animated.Value(0)).current;
+  const miningActive = miningData?.miningActive ?? false;
+  const balanceBase = miningData?.balance ?? 0;
+
+  const [boostOpen, setBoostOpen] = useState(false);
+  const [dailyOpen, setDailyOpen] = useState(false);
+  const [watchOpen, setWatchOpen] = useState(false);
+
+  // session live values (computed every second)
+  const [sessionBalance, setSessionBalance] = useState<number>(0);
+  const [sessionElapsed, setSessionElapsed] = useState<number>(0); // seconds
+  const [timeLeft, setTimeLeft] = useState<number>(DAY_SECONDS);
+  const [news, setNews] = useState<any[]>([]);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+
+  // compute per-second rate
+  const perSecond = miningActive ? DAILY_MAX / DAY_SECONDS : 0;
+  const perMinute = perSecond * 60;
+  const perHour = perMinute * 60;
+
+  // Animate displayed balance whenever getLiveBalance or base changes
+  useEffect(() => {
+    try {
+      const val = typeof getLiveBalance === "function" ? getLiveBalance() : undefined;
+      Animated.timing(animatedBalance, {
+        toValue: val ?? balanceBase,
+        duration: 600,
+        useNativeDriver: false,
+      }).start();
+    } catch (e) {
+      console.warn("[AnimatedBalance] getLiveBalance error", e);
+    }
+  }, [balanceBase, getLiveBalance, animatedBalance]);
+
+  // keep a ref to latest miningData so the interval can read fresh values
+  const miningDataRef = useRef(miningData);
+  useEffect(() => {
+    miningDataRef.current = miningData;
+  }, [miningData]);
+
+  useEffect(() => {
+    let id: number | null = null;
+
+    const compute = () => {
+      const md = miningDataRef.current;
+      const lastStart = md?.lastStart ?? null;
+
+      const startMs = lastStart
+        ? typeof (lastStart as any).toMillis === "function"
+          ? (lastStart as any).toMillis()
+          : Number(lastStart)
+        : 0;
+
+      if (md && md.miningActive && startMs > 0) {
+        const now = Date.now();
+        const elapsedSeconds = Math.max(0, Math.floor((now - startMs) / 1000));
+        const capped = Math.min(elapsedSeconds, DAY_SECONDS);
+        const sessionGain = capped * (DAILY_MAX / DAY_SECONDS);
+
+        setSessionElapsed(capped);
+        setSessionBalance(sessionGain);
+        setTimeLeft(Math.max(0, DAY_SECONDS - capped));
+      } else {
+        setSessionElapsed(0);
+        setSessionBalance(0);
+        setTimeLeft(DAY_SECONDS);
+      }
+    };
+
+    compute();
+    id = global.setInterval(compute, 1000) as unknown as number;
+
+    return () => {
+      if (id !== null) {
+        clearInterval(id);
+      }
+    };
+  }, []);
+
+  // spin animation
+  const spinValue = useRef(new Animated.Value(0)).current;
+  const spinAnimRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!spinAnimRef.current) {
+      spinAnimRef.current = Animated.loop(
+        Animated.timing(spinValue, {
+          toValue: 1,
+          duration: 3500,
+          useNativeDriver: true,
+        })
+      );
+    }
+
+    if (miningActive) {
+      spinAnimRef.current.start();
+    } else {
+      try {
+        spinAnimRef.current.stop();
+      } catch (e) {}
+      spinValue.setValue(0);
+    }
+
+    return () => {
+      if (spinAnimRef.current) {
+        try {
+          spinAnimRef.current.stop();
+        } catch (e) {}
+      }
+    };
+  }, [miningActive, spinValue]);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  // start/stop handlers (with optimistic UI)
+  const handleStartStop = async () => {
+    const user = auth.currentUser;
+    if (!user) return router.push("/auth/login" as any);
+
+    try {
+      if (!miningActive) {
+        setIsStarting(true);
+        await start();
+        setIsStarting(false);
+      } else {
+        await stop();
+      }
+    } catch (err) {
+      setIsStarting(false);
+      Alert.alert("Error", "Couldn't toggle mining.");
+    }
+  };
+
+  // claim handler
+  const handleClaim = async () => {
+    const user = auth.currentUser;
+    if (!user) return router.push("/auth/login" as any);
+
+    try {
+      setIsClaiming(true);
+      const reward = await claim();
+      setIsClaiming(false);
+      Alert.alert("Claimed", `${reward?.toFixed(4) ?? 0} VAD`);
+    } catch (err) {
+      setIsClaiming(false);
+      Alert.alert("Error", "Claim failed.");
+    }
+  };
+
+  // Realtime Database listener for /news (ordered by key latest-first)
+  useEffect(() => {
+    if (!app) return;
+
+    let mounted = true;
+    const db = getDatabase(app);
+    const newsRef = dbRef(db, "news");
+
+    const unsub = onValue(
+      newsRef,
+      (snap) => {
+        if (!mounted) return;
+        const value = snap.val();
+        if (!value) {
+          setNews([]);
+          return;
+        }
+
+        try {
+          const arr = Object.keys(value)
+            .map((k) => ({ id: k, ...(value[k] as any) }))
+            .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+          setNews(arr);
+        } catch (e) {
+          console.warn("[NewsListener] parse error", e);
+          setNews([]);
+        }
+      },
+      (err) => {
+        console.warn("[NewsListener] onValue error", err);
+        if (mounted) setNews([]);
+      }
+    );
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [app]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
+      </View>
+    );
+  }
+
+  // Animated total balance component
+  const AnimatedBalance = () => {
+    const [val, setVal] = useState(0);
+    const listenerIdRef = useRef<string | number | null>(null);
+
+    useEffect(() => {
+      listenerIdRef.current = animatedBalance.addListener(({ value }) => {
+        setVal(Number(value));
+      });
+
+      return () => {
+        if (listenerIdRef.current !== null) {
+          try {
+            animatedBalance.removeListener(listenerIdRef.current as string);
+          } catch {
+            try {
+              (animatedBalance as any).removeAllListeners();
+            } catch {}
+          }
+        }
+      };
+    }, []);
+
+    return (
+      <MotiText
+        from={{ opacity: 0, translateY: 8 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ duration: 360 }}
+        style={styles.balance}
+      >
+        {val.toFixed(4)} <Text style={styles.vadText}>VAD</Text>
+      </MotiText>
+    );
+  };
+
+  // session progress
+  const progress = useMemo(() => {
+    if (!miningActive) return 0;
+    return Math.min(1, sessionElapsed / DAY_SECONDS);
+  }, [miningActive, sessionElapsed]);
+
+  const formatTime = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h}h ${m}m ${s}s`;
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* TOP NAV (floating) */}
+      <View style={styles.topNav}>
+        <Pressable onPress={() => router.push("/(tabs)/profile")}>
+          <View style={styles.profileCircle}>
+            {userProfile?.avatarUrl ? (
+              <Image
+                source={
+                  typeof userProfile.avatarUrl === "string"
+                    ? { uri: userProfile.avatarUrl }
+                    : undefined
+                }
+                style={styles.avatar}
+              />
+            ) : (
+              <Ionicons name="person" size={22} color="#fff" />
+            )}
+          </View>
+        </Pressable>
+
+        <Pressable onPress={() => router.push("/(tabs)/explore")}>
+          <View style={styles.chatCircle}>
+            <Ionicons name="chatbubble-ellipses-outline" size={22} color="#fff" />
+          </View>
+        </Pressable>
+      </View>
+
+      {/* MAIN SCROLLABLE AREA */}
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 140 }} // keep extra room for fixed banner
+      >
+        {/* Header gradient card (small) */}
+        <LinearGradient colors={["#22163a", "#0e0916"]} style={styles.headerCard}>
+          <MotiText style={styles.headerTitle}>VAD Mining</MotiText>
+          <Text style={styles.headerSub}>Earn up to {DAILY_MAX} VAD every 24 hours</Text>
+        </LinearGradient>
+
+        {/* CURRENT BALANCE (open background) */}
+        <View style={styles.currentWrap}>
+          <Text style={styles.currentLabel}>Current Balance</Text>
+          <AnimatedBalance />
+        </View>
+
+        {/* Buttons Row */}
+        <View style={styles.buttonsRow}>
+          <Pressable
+            onPress={handleStartStop}
+            style={({ pressed }) => [
+              styles.halfBtn,
+              miningActive ? styles.miningActiveBtn : styles.startBtn,
+              { opacity: pressed ? 0.92 : 1 },
+            ]}
+            disabled={isStarting}
+          >
+            <View style={styles.btnInner}>
+              <MaterialIcons
+                name={miningActive ? "pause-circle" : "play-circle-fill"}
+                size={26}
+                color="#fff"
+              />
+              <Text style={styles.btnText}>{miningActive ? "Mine Active" : "Start Mine"}</Text>
+              <Text style={styles.smallTimer}>{miningActive ? formatTime(timeLeft) : ""}</Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={handleClaim}
+            style={({ pressed }) => [styles.halfBtn, styles.claimBtn, { opacity: pressed ? 0.98 : 1 }]}
+            disabled={isClaiming}
+          >
+            <View style={styles.btnInner}>
+              <MaterialIcons name="redeem" size={22} color="#0F0A2A" />
+              <Text style={styles.claimBtnText}>Claim Rewards</Text>
+              <Text style={styles.claimAmountText}>{balanceBase.toFixed(4)} VAD</Text>
+            </View>
+          </Pressable>
+        </View>
+
+        {/* SESSION BLOCK */}
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionTop}>
+            <View>
+              <Text style={styles.sessionLabel}>Session Mining</Text>
+              <Text style={styles.sessionValue}>
+                {sessionBalance.toFixed(4)} <Text style={styles.vadSmall}>VAD</Text>
+              </Text>
+            </View>
+
+            <Animated.View style={[styles.miningIcon, { transform: [{ rotate: spin }] }]}>
+              <Ionicons name="hardware-chip" size={24} color="#fff" />
+            </Animated.View>
+          </View>
+
+          {/* progress + meta */}
+          <View style={styles.progressWrap}>
+            <View style={styles.progressBg}>
+              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+            </View>
+
+            <View style={styles.progressMeta}>
+              <Text style={styles.progressText}>{formatTime(timeLeft)} left</Text>
+              <Text style={styles.progressText}>{(progress * 100).toFixed(1)}%</Text>
+            </View>
+          </View>
+
+          {/* Info box */}
+          <View style={styles.infoBox}>
+            <Text style={styles.infoTitle}>About VAD mining</Text>
+            <Text style={styles.infoBody}>
+              Mining accrues continuously while active, up to {DAILY_MAX} VAD per 24-hour session.
+              Claim anytime to add session rewards to your total balance.
+            </Text>
+          </View>
+        </View>
+
+        {/* Utilities row (inside scroll) */}
+        <View style={styles.utilityRow}>
+          <Pressable style={styles.utilityItem} onPress={() => setDailyOpen(true)}>
+            <Text style={{ color: "#fff" }}>Daily Claim</Text>
+          </Pressable>
+
+          <Pressable style={styles.utilityItem} onPress={() => setBoostOpen(true)}>
+            <Text style={{ color: "#fff" }}>Boost</Text>
+          </Pressable>
+
+          <Pressable style={styles.utilityItem} onPress={() => setWatchOpen(true)}>
+            <Text style={{ color: "#fff" }}>Watch & Earn</Text>
+          </Pressable>
+        </View>
+
+        {/* News & Updates — exactly once at the bottom of the scroll */}
+        <View style={styles.newsSection}>
+          <Text style={styles.newsHeader}>News & Updates</Text>
+
+          {news.length === 0 ? (
+            <View style={styles.newsEmptyCard}>
+              <Text style={styles.newsEmptyText}>No recent updates — check back soon.</Text>
+            </View>
+          ) : (
+            news.map((n) => (
+              <View key={n.id} style={styles.newsCardItem}>
+                {n.image ? (
+                  <Image source={{ uri: n.image }} style={styles.newsImage} />
+                ) : (
+                  <View style={styles.newsImagePlaceholder}>
+                    <Ionicons name="newspaper-outline" size={22} color="#8b8fb2" />
+                  </View>
+                )}
+
+                <View style={styles.newsTextWrap}>
+                  <Text style={styles.newsTitleText}>{n.title}</Text>
+
+                  {n.subtitle ? (
+                    <Text style={styles.newsBodyText} numberOfLines={2}>
+                      {n.subtitle}
+                    </Text>
+                  ) : null}
+
+                  <Text style={styles.newsTimeText}>
+                    {n.timestamp ? timeAgoFromUnix(Number(n.timestamp)) : ""}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Bottom spacer to prevent content being hidden behind the fixed banner */}
+        <View style={{ height: Platform.OS === "ios" ? 160 : 140 }} />
+      </ScrollView>
+
+      {/* FIXED Banner — truly outside ScrollView now */}
+      <View
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          alignItems: "center",
+          zIndex: 50,
+        }}
+      >
+        <View style={styles.bannerCard}>
+          <AdBanner />
+        </View>
+      </View>
+
+      {/* Modals — outside ScrollView */}
+      {dailyOpen && <DailyClaim visible={dailyOpen} onClose={() => setDailyOpen(false)} />}
+
+      {boostOpen && <Boost visible={boostOpen} onClose={() => setBoostOpen(false)} />}
+
+      {watchOpen && <WatchEarn visible={watchOpen} onClose={() => setWatchOpen(false)} />}
+    </View>
+  );
+}
+
+/* helper: shows relative time... */
+function timeAgoFromUnix(ts: number) {
+  if (!ts || Number.isNaN(Number(ts))) return "";
+  const t = ts > 1e12 ? ts : ts * 1000;
+  const diff = Math.floor((Date.now() - t) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}

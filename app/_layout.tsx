@@ -37,19 +37,6 @@ export default function RootLayout() {
   }, []);
 
 
-  // inside RootLayout
-useEffect(() => {
-  // initialize AdMob safely (returns a promise)
-  (async () => {
-    try {
-      await mobileAds().initialize();
-      console.log('[AdMob] initialized');
-    } catch (e) {
-      console.warn('[AdMob] initialization failed', e);
-    }
-  })();
-}, []);
-
   if (loading) return <StatusBar style="auto" />;
 
   return (
