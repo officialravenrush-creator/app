@@ -1,4 +1,5 @@
 // app/components/Boost.tsx
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,65 +8,92 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { useEffect, useState, useMemo } from "react";
 import { auth } from "../firebase/firebaseConfig";
 import { claimBoostReward } from "../firebase/user";
 import { useMining } from "../hooks/useMining";
 import { Timestamp } from "firebase/firestore";
 
+type BoostProps = {
+  visible: boolean;
+  onClose?: () => void;
+};
+
 function timeLeft(ms: number) {
-  if (ms <= 0) return "0h 0m";
+  if (!ms || ms <= 0) return "0h 0m";
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return `${h}h ${m}m`;
 }
 
-export default function Boost({ visible, onClose }: any) {
+export default function Boost({ visible, onClose }: BoostProps) {
   const { boost } = useMining();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [timer, setTimer] = useState(0);
   const [cooldownMs, setCooldownMs] = useState(0);
 
+  // mounted ref to avoid setState after unmount
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // if user is not authenticated when opening, close modal
   useEffect(() => {
     if (!auth.currentUser && visible) {
       onClose?.();
     }
-  }, [visible]);
-  
+    // only when visibility toggles
+  }, [visible, onClose]);
 
   const usedToday = boost?.usedToday ?? 0;
   const remaining = Math.max(0, 3 - usedToday);
 
-  // ----- DAILY RESET TIMER -----
+  // ----- DAILY RESET TIMER (robust parsing of lastReset) -----
   useEffect(() => {
     if (!boost?.lastReset) {
       setCooldownMs(0);
       return;
     }
 
-    const last =
-      (boost.lastReset as Timestamp).toMillis?.() ??
-      Number(boost.lastReset);
+    // normalize last timestamp into milliseconds (safe)
+    let lastMs = 0;
+    try {
+      if ((boost.lastReset as any)?.toMillis && typeof (boost.lastReset as any).toMillis === "function") {
+        // Firestore Timestamp
+        lastMs = (boost.lastReset as Timestamp).toMillis();
+      } else {
+        // attempt numeric coercion
+        const n = Number(boost.lastReset);
+        lastMs = Number.isFinite(n) ? n : 0;
+      }
+    } catch (e) {
+      lastMs = 0;
+    }
 
     const DAY = 24 * 3600 * 1000;
-    const diff = Date.now() - last;
+    const diff = Date.now() - lastMs;
     const remainingMs = Math.max(0, DAY - diff);
     setCooldownMs(remainingMs);
 
     const iv = setInterval(() => {
-      const nowRemain = Math.max(0, DAY - (Date.now() - last));
+      if (!mountedRef.current) return;
+      const nowRemain = Math.max(0, DAY - (Date.now() - lastMs));
       setCooldownMs(nowRemain);
-    }, 1000 * 30);
+    }, 1000 * 30); // update every 30s
 
     return () => clearInterval(iv);
   }, [boost?.lastReset]);
 
   // ----- FAKE AD COUNTDOWN -----
   useEffect(() => {
-    if (!loading || timer === 0) return;
+    if (!loading || timer <= 0) return;
     const iv = setInterval(() => {
+      if (!mountedRef.current) return;
       setTimer((t) => (t > 0 ? t - 1 : 0));
     }, 1000);
     return () => clearInterval(iv);
@@ -73,7 +101,12 @@ export default function Boost({ visible, onClose }: any) {
 
   // ----- CLAIM BOOST -----
   const handleWatchAd = async () => {
-    if (!auth.currentUser || loading) return;
+    // quick guards
+    if (!auth.currentUser) {
+      setMessage("You must be signed in to boost.");
+      return;
+    }
+    if (loading) return;
 
     if (remaining <= 0) {
       setMessage("Daily boost limit reached (3/3).");
@@ -82,11 +115,24 @@ export default function Boost({ visible, onClose }: any) {
 
     setLoading(true);
     setMessage("");
-    setTimer(5); // simulated ad
+    setTimer(5); // simulated ad countdown
 
-    setTimeout(async () => {
+    // simulate ad playing for 5s — handle race conditions with mountedRef and auth
+    const adTimeout = setTimeout(async () => {
       try {
-        const reward = await claimBoostReward(auth.currentUser!.uid);
+        if (!mountedRef.current) return;
+        const user = auth.currentUser;
+        if (!user) {
+          // user signed out during ad
+          if (mountedRef.current) {
+            setMessage("You were signed out. Please log in again.");
+          }
+          return;
+        }
+
+        const reward = await claimBoostReward(user.uid);
+
+        if (!mountedRef.current) return;
 
         if (reward === 0) {
           setMessage("Boost limit reached for today.");
@@ -95,22 +141,32 @@ export default function Boost({ visible, onClose }: any) {
         }
       } catch (err) {
         console.error("Boost error:", err);
-        setMessage("Boost failed. Try again.");
+        if (mountedRef.current) setMessage("Boost failed. Try again.");
       } finally {
-        setLoading(false);
-        setTimer(0);
+        if (mountedRef.current) {
+          setLoading(false);
+          setTimer(0);
+        }
       }
     }, 5000);
+
+    // cleanup ad timeout if component unmounts or modal closes early
+    const cleanup = () => {
+      clearTimeout(adTimeout);
+    };
+
+    // if modal visibility changes or component unmounts, clear timeout
+    // (we attach to mountedRef cleanup above; still call cleanup immediately if not mounted)
+    if (!mountedRef.current) cleanup();
   };
 
   const progressLabel = useMemo(() => {
-    if (remaining === 0)
-      return `Next reset in ${timeLeft(cooldownMs)}`;
+    if (remaining === 0) return `Next reset in ${timeLeft(cooldownMs)}`;
     return `${remaining} boost${remaining === 1 ? "" : "s"} remaining today`;
   }, [remaining, cooldownMs]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
           <Text style={styles.title}>⚡ Boost Earnings</Text>
@@ -127,9 +183,11 @@ export default function Boost({ visible, onClose }: any) {
             {[0, 1, 2].map((i) => (
               <View
                 key={i}
+                // apply margin to space dots without relying on `gap`
                 style={[
                   styles.useDot,
                   i < usedToday && styles.useDotActive,
+                  i < 2 ? { marginRight: 10 } : undefined,
                 ]}
               />
             ))}
@@ -144,9 +202,9 @@ export default function Boost({ visible, onClose }: any) {
             ]}
           >
             {loading ? (
-              <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+              <View style={styles.loadingRow}>
                 <ActivityIndicator color="#fff" />
-                <Text style={styles.watchText}>
+                <Text style={[styles.watchText, { marginLeft: 10 }]}>
                   Watching... ({timer}s)
                 </Text>
               </View>
@@ -230,7 +288,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     flexDirection: "row",
     justifyContent: "center",
-    gap: 10,
+    alignItems: "center",
   },
 
   useDot: {
@@ -259,6 +317,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
     fontSize: 15,
+  },
+
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   message: {

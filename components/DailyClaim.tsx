@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { auth } from "../firebase/firebaseConfig";
 import { claimDailyReward } from "../firebase/user";
 import { useMining } from "../hooks/useMining";
@@ -16,7 +16,7 @@ import { Timestamp } from "firebase/firestore";
 const STREAK_REWARDS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 2.0];
 
 function fmtTimeLeft(ms: number) {
-  if (ms <= 0) return "0h 0m";
+  if (!ms || ms <= 0) return "0h 0m";
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -27,45 +27,66 @@ export default function DailyClaim({ visible, onClose }: any) {
   const { dailyClaim } = useMining();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [timer, setTimer] = useState(0); // countdown seconds while "ad" plays
-  const [cooldownMs, setCooldownMs] = useState<number>(0);
+  const [timer, setTimer] = useState(0);
+  const [cooldownMs, setCooldownMs] = useState(0);
 
-    useEffect(() => {
+  // prevent setState after unmount
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // close if user signed out
+  useEffect(() => {
     if (!auth.currentUser && visible) {
       onClose?.();
     }
-  }, [visible]);
+  }, [visible, onClose]);
 
-
-  // update cooldown based on dailyClaim.lastClaim
+  // cooldown timer
   useEffect(() => {
-    if (!dailyClaim || !dailyClaim.lastClaim) {
+    if (!dailyClaim?.lastClaim) {
       setCooldownMs(0);
       return;
     }
 
-    const last = (dailyClaim.lastClaim as Timestamp).toMillis
-      ? (dailyClaim.lastClaim as Timestamp).toMillis()
-      : Number(dailyClaim.lastClaim);
+    // normalize Firestore timestamp
+    let lastMs = 0;
+    try {
+      if ((dailyClaim.lastClaim as any)?.toMillis) {
+        lastMs = (dailyClaim.lastClaim as Timestamp).toMillis();
+      } else {
+        const n = Number(dailyClaim.lastClaim);
+        lastMs = Number.isFinite(n) ? n : 0;
+      }
+    } catch {
+      lastMs = 0;
+    }
 
     const DAY = 24 * 3600 * 1000;
-    const diff = Date.now() - last;
-    const remaining = Math.max(0, DAY - diff);
-    setCooldownMs(remaining);
+    const diff = Date.now() - lastMs;
+    const remain = Math.max(0, DAY - diff);
+    setCooldownMs(remain);
 
-    // update live countdown every minute
     const iv = setInterval(() => {
-      const nowRemaining = Math.max(0, DAY - (Date.now() - last));
-      setCooldownMs(nowRemaining);
-    }, 1000 * 30);
+      if (!mountedRef.current) return;
+      const nowRemain = Math.max(0, DAY - (Date.now() - lastMs));
+      setCooldownMs(nowRemain);
+    }, 30_000);
 
     return () => clearInterval(iv);
-  }, [dailyClaim]);
+  }, [dailyClaim?.lastClaim]);
 
-  // local countdown while ad is simulating
+  // fake ad countdown
   useEffect(() => {
-    if (!loading || timer === 0) return;
-    const iv = setInterval(() => setTimer((t) => (t > 0 ? t - 1 : 0)), 1000);
+    if (!loading || timer <= 0) return;
+    const iv = setInterval(() => {
+      if (!mountedRef.current) return;
+      setTimer((t) => (t > 0 ? t - 1 : 0));
+    }, 1000);
     return () => clearInterval(iv);
   }, [loading, timer]);
 
@@ -75,8 +96,6 @@ export default function DailyClaim({ visible, onClose }: any) {
       setMessage("Please log in to claim.");
       return;
     }
-
-    // If cooldown exists, block
     if (cooldownMs > 0) {
       setMessage("Already claimed — come back later.");
       return;
@@ -84,12 +103,22 @@ export default function DailyClaim({ visible, onClose }: any) {
 
     setLoading(true);
     setMessage("");
-    setTimer(5); // 5s fake interstitial
+    setTimer(5);
 
-    // simulated ad playback
-    setTimeout(async () => {
+    const timeoutId = setTimeout(async () => {
       try {
-        const reward = await claimDailyReward(user.uid);
+        if (!mountedRef.current) return;
+        const u = auth.currentUser;
+        if (!u) {
+          if (mountedRef.current) {
+            setMessage("You were signed out. Try again.");
+          }
+          return;
+        }
+
+        const reward = await claimDailyReward(u.uid);
+
+        if (!mountedRef.current) return;
 
         if (reward === 0) {
           setMessage("Already claimed for today.");
@@ -97,34 +126,38 @@ export default function DailyClaim({ visible, onClose }: any) {
           setMessage(`+${reward.toFixed(1)} VAD added to your balance!`);
         }
       } catch (err) {
-        console.error("claimDailyReward error", err);
-        setMessage("Claim failed. Try again.");
+        console.error("claimDailyReward error:", err);
+        if (mountedRef.current) setMessage("Claim failed. Try again.");
       } finally {
-        setLoading(false);
-        setTimer(0);
+        if (mountedRef.current) {
+          setLoading(false);
+          setTimer(0);
+        }
       }
     }, 5000);
+
+    // cleanup if unmounted
+    if (!mountedRef.current) {
+      clearTimeout(timeoutId);
+    }
   };
 
-  // derive streak & claimed status from server
   const streak = dailyClaim?.streak ?? 0;
-  const lastClaimTs = dailyClaim?.lastClaim ?? null;
-  const todayClaimed = (() => {
-    if (!lastClaimTs) return false;
-    const lastMs =
-      (lastClaimTs as Timestamp).toMillis?.() ?? Number(lastClaimTs);
-    return Date.now() - lastMs < 24 * 3600 * 1000;
-  })();
+  const progressLabel = useMemo(() => {
+    return cooldownMs > 0 ? fmtTimeLeft(cooldownMs) : "Available now";
+  }, [cooldownMs]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
+          {/* Title */}
           <Text style={styles.title}>🔥 Daily Check-In</Text>
           <Text style={styles.sub}>
-            Claim once every 24 hours. Keep your streak to increase rewards.
+            Claim every 24 hours. Keep streaks to increase rewards.
           </Text>
 
+          {/* Reward Grid */}
           <View style={styles.grid}>
             {STREAK_REWARDS.map((r, i) => {
               const day = i + 1;
@@ -132,10 +165,16 @@ export default function DailyClaim({ visible, onClose }: any) {
               return (
                 <View
                   key={day}
-                  style={[styles.dayBox, claimed ? styles.dayClaimed : undefined]}
+                  style={[
+                    styles.dayBox,
+                    claimed && styles.dayClaimed,
+                    // spacing hack to replace gap
+                    (day % 3 !== 0) && { marginRight: 12 },
+                    day > 3 && { marginTop: 12 },
+                  ]}
                 >
                   <Text style={styles.dayLabel}>Day {day}</Text>
-                  <Text style={[styles.dayReward, claimed && styles.claimedText]}>
+                  <Text style={[styles.dayReward, claimed && styles.dayRewardClaimed]}>
                     +{r} VAD
                   </Text>
                   {claimed && <Text style={styles.check}>✔</Text>}
@@ -144,31 +183,27 @@ export default function DailyClaim({ visible, onClose }: any) {
             })}
           </View>
 
+          {/* Meta */}
           <View style={styles.metaRow}>
-            <Text style={styles.metaText}>
-              Streak: <Text style={{ fontWeight: "900" }}>{streak} day(s)</Text>
-            </Text>
-
-            <Text style={styles.metaText}>
-              Next:{" "}
-              <Text style={{ fontWeight: "900" }}>
-                {cooldownMs > 0 ? fmtTimeLeft(cooldownMs) : "Available now"}
-              </Text>
-            </Text>
+            <Text style={styles.metaText}>Streak: {streak} day(s)</Text>
+            <Text style={styles.metaText}>Next: {progressLabel}</Text>
           </View>
 
+          {/* Claim Button */}
           <Pressable
             onPress={handleClaim}
             disabled={loading || cooldownMs > 0}
             style={[
               styles.claimBtn,
-              (loading || cooldownMs > 0) && { opacity: 0.65 },
+              (loading || cooldownMs > 0) && { opacity: 0.6 },
             ]}
           >
             {loading ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <ActivityIndicator color="#000" />
-                <Text style={styles.claimText}>Watching... ({timer}s)</Text>
+                <Text style={[styles.claimText, { marginLeft: 10 }]}>
+                  Watching... ({timer}s)
+                </Text>
               </View>
             ) : (
               <Text style={styles.claimText}>
@@ -187,7 +222,6 @@ export default function DailyClaim({ visible, onClose }: any) {
     </Modal>
   );
 }
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -223,13 +257,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  grid: {
-    marginTop: 18,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    justifyContent: "space-between",
-  },
+ grid: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  justifyContent: "space-between",
+},
+
 
   dayBox: {
     width: "30%",
@@ -252,12 +285,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
-  dayReward: {
+ dayReward: {
     color: "#34D399",
     fontWeight: "900",
     fontSize: 13,
   },
+  dayRewardClaimed: {
+    color: "#22C55E",
+  },
 
+  
   claimedText: {
     color: "#16A34A",
   },
