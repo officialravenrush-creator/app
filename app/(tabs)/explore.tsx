@@ -1,3 +1,4 @@
+//app/(tabs)/explore.tsx
 import React, { useEffect, useRef } from "react";
 import {
   View,
@@ -57,10 +58,10 @@ const SAMPLE_MARKET_ITEMS = [
   },
 ];
 
+
 export default function Explore() {
   return <ExploreScreen />;
 }
-
 
 function ExploreScreen() {
   const user = auth.currentUser;

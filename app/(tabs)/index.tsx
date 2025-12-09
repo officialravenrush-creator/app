@@ -200,11 +200,6 @@ interface NewsItem {
 
 /* ---------- component ---------- */
 export default function MiningDashboard() {
-  return <MiningDashboardScreen />;
-}
-
-// ✅ This is your real screen logic
-function MiningDashboardScreen() {
   const router = useRouter();
   const {
     miningData,
@@ -215,7 +210,7 @@ function MiningDashboardScreen() {
     claim,
     getLiveBalance,
   } = useMining();
-
+  
   const animatedBalance = useRef(new Animated.Value(0)).current;
   const miningActive = miningData?.miningActive ?? false;
   const balanceBase = miningData?.balance ?? 0;
