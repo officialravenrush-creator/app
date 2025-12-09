@@ -262,7 +262,7 @@ useEffect(() => {
 }, [miningData]);
 
 useEffect(() => {
-  let interval: NodeJS.Timeout;
+  let interval: ReturnType<typeof setInterval>;
 
   const compute = () => {
     const md = miningDataRef.current;
@@ -273,7 +273,10 @@ useEffect(() => {
         : Number(lastStart) || 0;
 
     if (md?.miningActive && startMs > 0) {
-      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      const elapsedSeconds = Math.max(
+        0,
+        Math.floor((Date.now() - startMs) / 1000)
+      );
       const capped = Math.min(elapsedSeconds, DAY_SECONDS);
       const sessionGain = capped * perSecond;
       setSessionElapsed(capped);
@@ -291,6 +294,7 @@ useEffect(() => {
 
   return () => clearInterval(interval);
 }, [perSecond]);
+
 
 
   /* ---------- Spin animation ---------- */
@@ -610,4 +614,3 @@ function timeAgoFromUnix(ts: number) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
-

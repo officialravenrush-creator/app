@@ -54,6 +54,7 @@
     },
     "extra": {
       "router": {},
+      "reactNativeGoogleMobileAdsAppId": "ca-app-pub-4533962949749202~8711232097",
       "eas": {
         "projectId": "8e9af1cf-e5b7-4272-9aaa-fc3b86afff37"
       }

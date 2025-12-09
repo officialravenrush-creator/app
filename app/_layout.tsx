@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
@@ -40,16 +39,14 @@ export default function RootLayout() {
     return () => unsubscribe();
   }, []);
 
-  // 🚨 Do not render any Stack.Screen until auth state is loaded
   if (loading) {
-  return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <ActivityIndicator size="large" />
-      <StatusBar style="auto" />
-    </View>
-  );
-}
-
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
@@ -64,13 +61,12 @@ export default function RootLayout() {
 
         {!isAuthenticated && (
           <>
-            <Stack.Screen name="auth/register" />
-            <Stack.Screen name="auth/login" />
-            <Stack.Screen name="auth/forgot" />
+            <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/forgot" options={{ headerShown: false }} />
           </>
         )}
 
-        {/* Modal screen always present */}
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
 

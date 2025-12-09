@@ -8,7 +8,8 @@ function setAdmobApplicationId(androidManifest, appId) {
 
   // Ensure tools namespace exists
   androidManifest.manifest.$["xmlns:tools"] =
-    androidManifest.manifest.$["xmlns:tools"] || "http://schemas.android.com/tools";
+    androidManifest.manifest.$["xmlns:tools"] ||
+    "http://schemas.android.com/tools";
 
   if (!app["meta-data"]) {
     app["meta-data"] = [];
@@ -16,16 +17,17 @@ function setAdmobApplicationId(androidManifest, appId) {
 
   // Remove previous conflicting meta-data
   app["meta-data"] = app["meta-data"].filter(
-    (item) => item.$["android:name"] !== "com.google.android.gms.ads.APPLICATION_ID"
+    (item) =>
+      item.$["android:name"] !== "com.google.android.gms.ads.APPLICATION_ID"
   );
 
-  // Add our meta-data with tools:replace
+  // Add our new meta-data
   app["meta-data"].push({
     $: {
       "android:name": "com.google.android.gms.ads.APPLICATION_ID",
       "android:value": appId,
-      "tools:replace": "android:value",
-    },
+      "tools:replace": "android:value"
+    }
   });
 
   return androidManifest;
@@ -35,18 +37,16 @@ module.exports = function withAdmobAppId(config) {
   return withAndroidManifest(config, (config) => {
     const appId = config.extra?.reactNativeGoogleMobileAdsAppId;
 
-    // ✅ Log App ID to debug
-    console.log("🔹 AdMob App ID detected:", appId);
+    console.log("🔹 Detected AdMob App ID:", appId);
 
     if (!appId) {
-      // ⚠️ Don't throw during iOS-only build — just warn
       if (process.env.EXPO_BUILD_PLATFORM === "android") {
         throw new Error(
-          "Missing AdMob App ID → add it in app.json under extra.reactNativeGoogleMobileAdsAppId"
+          "❌ Missing AdMob App ID — Add extra.reactNativeGoogleMobileAdsAppId in app.json"
         );
       } else {
         console.warn(
-          "[withAdmobAppId] Missing AdMob App ID for Android. Skipping..."
+          "⚠️ [withAdmobAppId] Missing AdMob App ID during non-Android build. Skipping..."
         );
         return config;
       }
