@@ -17,17 +17,31 @@ import { MotiText } from "moti";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { auth } from "../../firebase/firebaseConfig";
 import { useMining } from "../../hooks/useMining";
+
 import { getDatabase, ref as dbRef, onValue } from "firebase/database";
+
 import DailyClaim from "../../components/DailyClaim";
 import Boost from "../../components/Boost";
 import WatchEarn from "../../components/Watch-Earn";
 import AdBanner from "../../components/AdBanner";
-import { app } from "../../firebase/firebaseConfig";
 
 /* ============================================================
-   MAIN COMPONENT (Everything lives inside this function)
+   🔥 LAZY FIREBASE HELPERS (Fixes all crashes)
+=============================================================== */
+async function getAuthSafe() {
+  const { getAuth } = await import("firebase/auth");
+  const { app } = await import("../../firebase/firebaseConfig");
+  return getAuth(app);
+}
+
+async function getAppSafe() {
+  const { app } = await import("../../firebase/firebaseConfig");
+  return app;
+}
+
+/* ============================================================
+   MAIN COMPONENT
 =============================================================== */
 export default function MiningDashboard() {
   const router = useRouter();
@@ -69,9 +83,6 @@ export default function MiningDashboard() {
       alignItems: "center",
       borderWidth: 1,
       borderColor: "rgba(255,255,255,0.06)",
-      shadowColor: "#000",
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
     },
     avatar: { width: 48, height: 48, borderRadius: 24 },
     chatCircle: {
@@ -83,9 +94,6 @@ export default function MiningDashboard() {
       alignItems: "center",
       borderWidth: 1,
       borderColor: "rgba(255,255,255,0.06)",
-      shadowColor: "#000",
-      shadowOpacity: 0.12,
-      shadowRadius: 8,
     },
     scroll: { paddingHorizontal: 22, paddingTop: 86 },
     headerCard: {
@@ -95,9 +103,6 @@ export default function MiningDashboard() {
       marginBottom: 12,
       borderWidth: 1,
       borderColor: "rgba(139,92,246,0.12)",
-      shadowColor: "#8B5CF6",
-      shadowOpacity: 0.08,
-      shadowRadius: 18,
     },
     headerTitle: { fontSize: 18, color: "#fff", fontWeight: "900" },
     headerSub: { color: "#bfc7df", marginTop: 4, fontSize: 12 },
@@ -118,11 +123,7 @@ export default function MiningDashboard() {
       paddingHorizontal: 10,
       alignItems: "center",
       justifyContent: "center",
-      shadowColor: "#000",
-      shadowOpacity: 0.14,
-      shadowRadius: 12,
     },
-    btnInner: { alignItems: "center" },
     startBtn: {
       backgroundColor: "rgba(255,255,255,0.03)",
       borderWidth: 1,
@@ -133,6 +134,7 @@ export default function MiningDashboard() {
       borderWidth: 1,
       borderColor: "rgba(139,92,246,0.18)",
     },
+    btnInner: { alignItems: "center" },
     btnText: { color: "#fff", marginTop: 8, fontWeight: "700" },
     smallTimer: { color: "#9FA8C7", marginTop: 6, fontSize: 12 },
     claimBtn: { backgroundColor: "#fff" },
@@ -161,9 +163,6 @@ export default function MiningDashboard() {
       backgroundColor: "#8B5CF6",
       justifyContent: "center",
       alignItems: "center",
-      shadowColor: "#8B5CF6",
-      shadowOpacity: 0.32,
-      shadowRadius: 18,
     },
     progressWrap: { marginTop: 6 },
     progressBg: {
@@ -187,16 +186,6 @@ export default function MiningDashboard() {
     },
     infoTitle: { color: "#fff", fontWeight: "800", marginBottom: 6 },
     infoBody: { color: "#bfc7df", fontSize: 13 },
-    bannerCard: {
-      marginTop: 8,
-      backgroundColor: "#0f1113",
-      borderRadius: 12,
-      padding: 18,
-      alignItems: "center",
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.03)",
-    },
     utilityRow: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -208,12 +197,8 @@ export default function MiningDashboard() {
       borderRadius: 12,
       padding: 10,
       alignItems: "center",
-      justifyContent: "center",
       borderWidth: 1,
       borderColor: "rgba(255,255,255,0.03)",
-      shadowColor: "#000",
-      shadowOpacity: 0.06,
-      shadowRadius: 12,
     },
     newsSection: { marginBottom: 20 },
     newsHeader: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 12 },
@@ -235,7 +220,7 @@ export default function MiningDashboard() {
       borderWidth: 1,
       borderColor: "rgba(255,255,255,0.03)",
     },
-    newsImage: { width: 72, height: 72, borderRadius: 10, marginRight: 8 },
+    newsImage: { width: 72, height: 72, borderRadius: 10 },
     newsImagePlaceholder: {
       width: 72,
       height: 72,
@@ -243,7 +228,6 @@ export default function MiningDashboard() {
       backgroundColor: "rgba(139,92,246,0.06)",
       justifyContent: "center",
       alignItems: "center",
-      marginRight: 8,
     },
     newsTextWrap: { flex: 1 },
     newsTitleText: { color: "#fff", fontWeight: "800", fontSize: 15 },
@@ -254,6 +238,16 @@ export default function MiningDashboard() {
       justifyContent: "center",
       alignItems: "center",
       backgroundColor: "#060B1A",
+    },
+    bannerCard: {
+      marginTop: 8,
+      backgroundColor: "#0f1113",
+      borderRadius: 12,
+      padding: 18,
+      alignItems: "center",
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.03)",
     },
   });
 
@@ -316,7 +310,7 @@ export default function MiningDashboard() {
   }, [balanceBase, getLiveBalance]);
 
   /* ============================================================
-      Normalized Mining Data & Session Calculation
+      Normalized Mining Data & Session Calc
   =============================================================== */
   type NormalizedMiningData = {
     balance?: number;
@@ -341,6 +335,9 @@ export default function MiningDashboard() {
     miningDataRef.current = normalized;
   }, [miningData]);
 
+  /* ============================================================
+      Session Interval
+  =============================================================== */
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
 
@@ -414,10 +411,12 @@ export default function MiningDashboard() {
   });
 
   /* ============================================================
-      Start / Stop Mining
+      Start / Stop (lazy auth)
   =============================================================== */
   const handleStartStop = async () => {
+    const auth = await getAuthSafe();
     const user = auth.currentUser;
+
     if (!user) return router.push("/(auth)/login");
 
     try {
@@ -435,10 +434,12 @@ export default function MiningDashboard() {
   };
 
   /* ============================================================
-      Claim
+      Claim (lazy auth)
   =============================================================== */
   const handleClaim = async () => {
+    const auth = await getAuthSafe();
     const user = auth.currentUser;
+
     if (!user) return router.push("/(auth)/login");
 
     try {
@@ -454,47 +455,47 @@ export default function MiningDashboard() {
   };
 
   /* ============================================================
-      News Feed
+      News Feed (lazy app)
   =============================================================== */
   useEffect(() => {
-    if (!app) return;
-
-    const db = getDatabase(app);
-    const newsRef = dbRef(db, "news");
+    let unsub: any = null;
     let mounted = true;
 
-    const unsub = onValue(
-      newsRef,
-      (snap) => {
-        if (!mounted) return;
+    (async () => {
+      const app = await getAppSafe();
+      const db = getDatabase(app);
+      const newsRef = dbRef(db, "news");
 
-        const value = snap.val();
-        if (!value) return setNews([]);
+      unsub = onValue(
+        newsRef,
+        (snap) => {
+          if (!mounted) return;
 
-        try {
-          const arr: NewsItem[] = Object.keys(value)
-            .map((k) => ({
-              id: k,
-              ...(value[k] as Omit<NewsItem, "id">),
-            }))
-            .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+          const value = snap.val();
+          if (!value) return setNews([]);
 
-          setNews(arr);
-        } catch (e) {
-          console.warn("[NewsListener] parse error", e);
-          setNews([]);
-        }
-      },
-      (err) => {
-        console.warn("[NewsListener] error", err);
-        if (mounted) setNews([]);
-      }
-    );
+          try {
+            const arr: NewsItem[] = Object.keys(value)
+              .map((k) => ({
+                id: k,
+                ...(value[k] as Omit<NewsItem, "id">),
+              }))
+              .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+
+            setNews(arr);
+          } catch (e) {
+            console.warn("[NewsListener] error", e);
+            setNews([]);
+          }
+        },
+        () => mounted && setNews([])
+      );
+    })();
 
     return () => {
       mounted = false;
       try {
-        unsub();
+        unsub && unsub();
       } catch {}
     };
   }, []);
@@ -712,11 +713,7 @@ export default function MiningDashboard() {
                   <Image source={{ uri: n.image }} style={styles.newsImage} />
                 ) : (
                   <View style={styles.newsImagePlaceholder}>
-                    <Ionicons
-                      name="newspaper-outline"
-                      size={22}
-                      color="#8b8fb2"
-                    />
+                    <Ionicons name="newspaper-outline" size={22} color="#8b8fb2" />
                   </View>
                 )}
 

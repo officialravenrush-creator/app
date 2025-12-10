@@ -12,7 +12,7 @@ import {
 } from "react-native";
 
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import {  db } from "../../firebase/firebaseConfig";
+
 
 import { Link, useRouter } from "expo-router";
 

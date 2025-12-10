@@ -51,7 +51,7 @@ function LoginScreen() {
   setErrorMsg("");
 
   try {
-    // ✅ Load Firebase lazily
+    // ✅ Load Firebase lazily (IMPORTANT FIX)
     const { auth, db } = await import("../../firebase/firebaseConfig");
 
     await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -84,6 +84,7 @@ function LoginScreen() {
 
   setLoading(false);
 };
+
 
   return (
     <View style={styles.container}>
