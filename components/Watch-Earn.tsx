@@ -12,15 +12,16 @@ import {
 import { claimWatchEarnReward } from "../firebase/user";
 import { showRewardedAd } from "../components/RewardedAd";
 
-// Lazy Firebase imports
+// -----------------------------
+// LAZY FIREBASE (Expo Firebase)
+// -----------------------------
 const getAuth = async () =>
   (await import("firebase/auth")).getAuth();
-const getDB = async () =>
+
+const getFirestore = async () =>
   (await import("firebase/firestore")).getFirestore();
-const getDoc = async () =>
-  (await import("firebase/firestore")).doc;
-const onSnap = async () =>
-  (await import("firebase/firestore")).onSnapshot;
+
+const { doc, onSnapshot } = await import("firebase/firestore");
 
 type WatchEarnProps = {
   visible?: boolean;
@@ -33,22 +34,25 @@ export default function WatchEarn({
 }: WatchEarnProps) {
   const [uid, setUid] = useState<string | null>(null);
 
-  /* -------------------------- AUTH LISTENER (lazy) -------------------------- */
+  // -----------------------------
+  // 🔥 AUTH LISTENER (Expo Firebase)
+  // -----------------------------
   useEffect(() => {
-    let unsubAuth: any;
+    let unsub: any;
 
     (async () => {
       const auth = await getAuth();
-
-      unsubAuth = auth.onAuthStateChanged((user) => {
+      unsub = auth.onAuthStateChanged((user) => {
         setUid(user?.uid ?? null);
       });
     })();
 
-    return () => unsubAuth?.();
+    return () => unsub?.();
   }, []);
 
-  /* --------------------------- LOCAL UI STATES ------------------------------ */
+  // -----------------------------
+  // UI
+  // -----------------------------
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [completed, setCompleted] = useState(false);
@@ -60,33 +64,38 @@ export default function WatchEarn({
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  /* ------------------------------ AUTO CLOSE IF LOGGED OUT ------------------------------ */
+  // -----------------------------
+  // Auto-close when logged out
+  // -----------------------------
   useEffect(() => {
     if (visible && !uid) onClose?.();
-  }, [visible, uid, onClose]);
+  }, [visible, uid]);
 
-  /* ------------------------------ REALTIME LISTENER (lazy) ------------------------------ */
+  // -----------------------------
+  // 🔥 REALTIME FIRESTORE LISTENER
+  // -----------------------------
   useEffect(() => {
     if (!uid) return;
 
     let unsub: any;
 
     (async () => {
-      const db = await getDB();
-      const docFn = await getDoc();
-      const onSnapshot = await onSnap();
+      const db = await getFirestore();
+      const ref = doc(db, "users", uid);
 
-      const ref = docFn(db, "users", uid);
-      unsub = onSnapshot(ref, (snap: any) => {
+      unsub = onSnapshot(ref, (snap) => {
         if (!mountedRef.current || !snap.exists()) return;
 
-        const watch = snap.data()?.watchEarn ?? {};
+        const data = snap.data()?.watchEarn ?? {};
+
         setStats({
-          totalWatched: watch.totalWatched ?? 0,
-          totalEarned: watch.totalEarned ?? 0,
+          totalWatched: data.totalWatched ?? 0,
+          totalEarned: data.totalEarned ?? 0,
         });
       });
     })();
@@ -94,7 +103,9 @@ export default function WatchEarn({
     return () => unsub?.();
   }, [uid]);
 
-  /* ---------------------------- WATCH & EARN FLOW --------------------------- */
+  // -----------------------------
+  // WATCH FLOW
+  // -----------------------------
   const handleWatch = useCallback(async () => {
     if (!uid || loading) return;
 
@@ -120,7 +131,6 @@ export default function WatchEarn({
     }
   }, [uid, loading]);
 
-  /* ------------------------------ CLOSE HANDLER ----------------------------- */
   const closeIfIdle = useCallback(() => {
     if (!loading) onClose?.();
   }, [loading, onClose]);
@@ -194,7 +204,9 @@ export default function WatchEarn({
   );
 }
 
-// ------------------------------ STYLES ------------------------------
+/* ---------------------------------------------------
+   STYLES (unchanged)
+---------------------------------------------------- */
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
