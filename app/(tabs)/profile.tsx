@@ -159,7 +159,7 @@ function ProfileScreen() {
   return (
     <Animated.View style={[styles.container, { opacity: fade }]}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Your Profile</Text>
+        <Text style={styles.pageTitle}>My Profile</Text>
 
         {/* Avatar */}
         <View style={styles.avatarBox}>
