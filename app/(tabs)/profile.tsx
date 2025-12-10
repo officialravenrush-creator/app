@@ -12,8 +12,6 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { auth, db } from "../../firebase/firebaseConfig";
-import { doc, onSnapshot } from "firebase/firestore";
 import * as Clipboard from "expo-clipboard";
 
 /* ---------- Expo Router Default Export ---------- */
@@ -21,12 +19,23 @@ export default function Profile() {
   return <ProfileScreen />;
 }
 
+/* -------------------------------------------------
+    🔥 LAZY LOADING FIREBASE (NO STATIC IMPORTS)
+-------------------------------------------------- */
+async function loadFirebase() {
+  const firebase = await import("../../firebase/firebaseConfig");
+  return {
+    auth: firebase.auth,
+    db: firebase.db,
+  };
+}
+
 /* ---------- Main Screen ---------- */
 function ProfileScreen() {
-  const uid = auth.currentUser?.uid ?? null;
-
+  const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -40,32 +49,72 @@ function ProfileScreen() {
     }).start();
   }, []);
 
-  /* ---------- Firebase Live Snapshot Listener ---------- */
+  /* ---------- Mount Guard ---------- */
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  /* -------------------------------------------------
+      🔥 Lazy Load Auth + Set UID Once
+  -------------------------------------------------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const { auth } = await loadFirebase();
+        const user = auth.currentUser;
+        setUid(user?.uid ?? null);
+      } catch (err) {
+        console.log("Lazy auth load error:", err);
+        setUid(null);
+      }
+    })();
+  }, []);
+
+  /* -------------------------------------------------
+      🔥 Lazy Load Firestore Listener
+  -------------------------------------------------- */
   useEffect(() => {
     if (!uid) {
       setLoading(false);
       return;
     }
 
-    const ref = doc(db, "users", uid);
+    let unsub: any;
 
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (snap.exists()) {
-          setData(snap.data());
-        }
-        setLoading(false);
-      },
-      (error) => {
-        console.log("🔥 Firestore listener error:", error);
-        setLoading(false);
+    const listen = async () => {
+      try {
+        const { db } = await loadFirebase();
+        const { doc, onSnapshot } = await import("firebase/firestore");
+
+        const ref = doc(db, "users", uid);
+
+        unsub = onSnapshot(
+          ref,
+          (snap) => {
+            if (!mounted) return;
+            if (snap.exists()) setData(snap.data());
+            setLoading(false);
+          },
+          (error) => {
+            console.log("🔥 Snapshot error:", error);
+            if (mounted) setLoading(false);
+          }
+        );
+      } catch (err) {
+        console.log("🔥 Lazy Firestore error:", err);
+        if (mounted) setLoading(false);
       }
-    );
+    };
 
-    return () => unsub();
-  }, [uid]);
+    listen();
 
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [uid, mounted]);
+
+  /* ---------- No UID ---------- */
   if (!uid) {
     return (
       <View style={styles.centered}>
@@ -76,6 +125,7 @@ function ProfileScreen() {
     );
   }
 
+  /* ---------- While Loading ---------- */
   if (loading || !data) {
     return (
       <View style={styles.centered}>
@@ -84,16 +134,16 @@ function ProfileScreen() {
     );
   }
 
-  /* ---------- Safe Data Extraction ---------- */
-  const username = data.username ?? "Unknown User";
-  const referralCode = data.referralCode ?? "";
-  const referredBy = data.referredBy ?? "Not referred";
+  /* ---------- Safe Access ---------- */
+  const username = data?.username ?? "Unknown User";
+  const referralCode = data?.referralCode ?? "";
+  const referredBy = data?.referredBy ?? "Not referred";
 
-  const miningBalance = data.mining?.balance ?? 0;
-  const dailyTotal = data.dailyClaim?.totalEarned ?? 0;
-  const boostBalance = data.boost?.balance ?? 0;
-  const watchEarnTotal = data.watchEarn?.totalEarned ?? 0;
-  const referrals = data.referrals?.totalReferred ?? 0;
+  const miningBalance = data?.mining?.balance ?? 0;
+  const dailyTotal = data?.dailyClaim?.totalEarned ?? 0;
+  const boostBalance = data?.boost?.balance ?? 0;
+  const watchEarnTotal = data?.watchEarn?.totalEarned ?? 0;
+  const referrals = data?.referrals?.totalReferred ?? 0;
 
   const totalEarned =
     miningBalance + dailyTotal + boostBalance + watchEarnTotal;
@@ -195,14 +245,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#050814",
     padding: 20,
   },
-
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#050814",
   },
-
   pageTitle: {
     color: "#fff",
     fontSize: 24,
@@ -210,7 +258,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 14,
   },
-
   avatarBox: {
     width: 120,
     height: 120,
@@ -223,7 +270,6 @@ const styles = StyleSheet.create({
     borderColor: "#8B5CF6",
     marginBottom: 20,
   },
-
   mainCard: {
     backgroundColor: "#0B1020",
     padding: 26,
@@ -233,26 +279,22 @@ const styles = StyleSheet.create({
     borderColor: "#22C55E66",
     marginBottom: 16,
   },
-
   mainLabel: {
     color: "#9FA8C7",
     fontSize: 13,
   },
-
   mainValue: {
     color: "#22C55E",
     fontSize: 32,
     fontWeight: "900",
     marginTop: 8,
   },
-
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
     justifyContent: "space-between",
   },
-
   statCard: {
     width: "48%",
     backgroundColor: "#0B1020",
@@ -262,20 +304,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1E293B",
   },
-
   statTitle: {
     color: "#9FA8C7",
     fontSize: 12,
     marginTop: 6,
   },
-
   statValue: {
     color: "#fff",
     fontSize: 15,
     fontWeight: "800",
     marginTop: 2,
   },
-
   card: {
     backgroundColor: "#0B1020",
     borderRadius: 18,
@@ -284,45 +323,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1E293B",
   },
-
   label: {
     color: "#9FA8C7",
     fontSize: 12,
   },
-
   value: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
     marginTop: 4,
   },
-
   refRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 6,
   },
-
   refText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "900",
   },
-
   copyBtn: {
     backgroundColor: "#8B5CF6",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
   },
-
   copyText: {
     color: "#fff",
     fontWeight: "900",
     fontSize: 12,
   },
-
   refCard: {
     marginTop: 20,
     backgroundColor: "rgba(52,211,153,0.12)",
@@ -334,12 +366,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#22C55E55",
   },
-
   refTitle: {
     color: "#9FA8C7",
     fontSize: 12,
   },
-
   refValue: {
     color: "#22C55E",
     fontSize: 20,
