@@ -1,40 +1,53 @@
-// firebase/firebaseConfig.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { initializeAuth, getReactNativePersistence } from "firebase/auth/react-native";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID!,
+  apiKey: "AIzaSyAap9MZDpdpsixSY1dD5m4x_XXj1poM6d0",
+  authDomain: "vad-app-4a6e8.firebaseapp.com",
+  projectId: "vad-app-4a6e8",
+  storageBucket: "vad-app-4a6e8.firebasestorage.app",
+  messagingSenderId: "98354868664",
+  appId: "1:98354868664:web:441334cb2f14a3712f9f4d",
+  measurementId: "G-DXEYRK1F2P",
 };
 
-// Initialize Firebase App only once
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// -----------------------------
-// Safe React Native Auth
-// -----------------------------
+// ----------------------------------
+// 🔥 Lazy Auth Singleton
+// ----------------------------------
 let authInstance: ReturnType<typeof initializeAuth> | null = null;
 
-export const getAuthInstance = (): ReturnType<typeof initializeAuth> => {
+export const getAuthInstance = async () => {
   if (authInstance) return authInstance;
 
-  // Only initialize once
-  if (!app) throw new Error("Firebase App is not initialized");
+  const { initializeAuth, getReactNativePersistence } = await import(
+    "firebase/auth/react-native"
+  );
+  const AsyncStorageModule = await import("@react-native-async-storage/async-storage");
 
   authInstance = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
+    persistence: getReactNativePersistence(AsyncStorageModule.default),
   });
 
   return authInstance;
 };
 
-// -----------------------------
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+// ----------------------------------
+// 🔥 Lazy Firestore
+// ----------------------------------
+export const getDb = async () => {
+  await getAuthInstance(); // ❤️ Ensures Auth registered first
+  const { getFirestore } = await import("firebase/firestore");
+  return getFirestore(app);
+};
+
+// ----------------------------------
+// 🔥 Lazy Storage
+// ----------------------------------
+export const getStorageInstance = async () => {
+  await getAuthInstance(); // ❤️ Same logic
+  const { getStorage } = await import("firebase/storage");
+  return getStorage(app);
+};

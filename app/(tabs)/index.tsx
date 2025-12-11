@@ -449,15 +449,17 @@ export default function MiningDashboard() {
     }
 
     let auth;
-    try {
-      auth = getAuthInstance();
-    } catch (e) {
-      console.warn("[handleStartStop] getAuthInstance failed", e);
-      Alert.alert("Error", "Auth not available.");
-      return;
-    }
+try {
+  auth = await getAuthInstance();
+} catch (e) {
+  console.warn("[handleStartStop] getAuthInstance failed", e);
+  Alert.alert("Error", "Auth not available.");
+  return;
+}
 
-    const user = auth.currentUser;
+const user = auth.currentUser;
+
+
     if (!user) return router.push("/(auth)/login");
 
     try {
@@ -483,16 +485,18 @@ export default function MiningDashboard() {
       return;
     }
 
-    let auth;
-    try {
-      auth = getAuthInstance();
-    } catch (e) {
-      console.warn("[handleClaim] getAuthInstance failed", e);
-      Alert.alert("Error", "Auth not available.");
-      return;
-    }
+   let auth;
+try {
+  auth = await getAuthInstance();
+} catch (e) {
+  console.warn("[handleClaim] getAuthInstance failed", e);
+  Alert.alert("Error", "Auth not available.");
+  return;
+}
 
-    const user = auth.currentUser;
+const user = auth.currentUser;
+ 
+   
     if (!user) return router.push("/(auth)/login");
 
     try {
@@ -840,4 +844,3 @@ function timeAgoFromUnix(ts: number) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
-

@@ -76,22 +76,22 @@ function RegisterScreen() {
   setErrorMsg("");
 
   try {
-    // 👇 Lazy import — avoids early Firebase initialization
-  // 👇 Lazy import — avoids early Firebase initialization
-const firebase = await import("../../firebase/firebaseConfig");
+    // Lazy import Firebase
+    const firebase = await import("../../firebase/firebaseConfig");
 
-const auth = firebase.getAuthInstance();
-const db = firebase.db;
+    const auth = await firebase.getAuthInstance();  // ✅ FIXED
+    const db = await firebase.getDb();              // ✅ FIXED
 
-const userCredential = await createUserWithEmailAndPassword(
-  auth,
-  email.trim(),
-  password
-);
-
+    // Create user
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      email.trim(),
+      password
+    );
 
     const user = userCredential.user;
 
+    // Check if user profile exists
     const profileSnap = await getDoc(doc(db, "users", user.uid));
 
     if (!profileSnap.exists()) {
@@ -106,6 +106,7 @@ const userCredential = await createUserWithEmailAndPassword(
 
   setLoading(false);
 };
+
 
   return (
     <View style={styles.container}>

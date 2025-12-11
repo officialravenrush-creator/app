@@ -9,8 +9,6 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { View, ActivityIndicator } from "react-native";
 import { useEffect, useState } from "react";
 
-import { doc, getDoc } from "firebase/firestore";
-
 type FirebaseUser = {
   uid: string;
   email?: string | null;
@@ -30,10 +28,8 @@ export default function RootLayout() {
     (async () => {
       try {
         // Lazy-load Firebase config
-        const { getAuthInstance, db } = await import("../firebase/firebaseConfig");
-        const auth = getAuthInstance();
-
-        if (cancelled) return;
+        const { getAuthInstance, getDb } = await import("../firebase/firebaseConfig");
+        const auth = await getAuthInstance();
 
         unsubscribe = auth.onAuthStateChanged(async (user: FirebaseUser | null) => {
           if (cancelled) return;
@@ -42,6 +38,9 @@ export default function RootLayout() {
             setIsAuthenticated(true);
 
             try {
+              const db = await getDb();
+              const { doc, getDoc } = await import("firebase/firestore");
+
               const userRef = doc(db, "users", user.uid);
               const userDoc = await getDoc(userRef);
 
@@ -59,11 +58,9 @@ export default function RootLayout() {
 
           setLoading(false);
         });
-      } catch (err) {
-        console.warn("[RootLayout] Firebase load failed:", err);
+      } catch (error) {
+        console.warn("[Auth] Initialization failed", error);
         setLoading(false);
-        setIsAuthenticated(false);
-        setProfileCompleted(false);
       }
     })();
 
@@ -83,7 +80,7 @@ export default function RootLayout() {
     );
   }
 
-  // Navigation flow
+  // Navigation logic
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>

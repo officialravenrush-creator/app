@@ -37,8 +37,8 @@ const [user, setUser] = useState<any>(null);
 
 useEffect(() => {
   (async () => {
-    const firebase = await import("../../firebase/firebaseConfig");
-    const auth = firebase.getAuthInstance();
+    const { getAuthInstance } = await import("../../firebase/firebaseConfig");
+    const auth = await getAuthInstance();
 
     setUser(auth.currentUser);
 
@@ -47,6 +47,7 @@ useEffect(() => {
     }
   })();
 }, []);
+
 
 
 
@@ -82,27 +83,30 @@ useEffect(() => {
     return;
   }
 
-try {
-  // 👇 Lazy import — SAFE for EAS builds
-  const { getAuthInstance, db, storage } = await import("../../firebase/firebaseConfig");
-  const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
-  const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
+  try {
+    // Lazy import Firebase pieces
+    const { getAuthInstance, getDb, getStorageInstance } = await import("../../firebase/firebaseConfig");
+    const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+    const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
 
-  const auth = getAuthInstance();  // ✅ Correct way
-  const user = auth.currentUser;   // ✅ Works now
+    const auth = await getAuthInstance();
+    const user = auth.currentUser;
 
-  if (!user) {
-    Alert.alert("Error", "Not authenticated");
-    return router.replace("/(auth)/login");
-  }
+    if (!user) {
+      Alert.alert("Error", "Not authenticated");
+      return router.replace("/(auth)/login");
+    }
 
+    const db = await getDb();
+    const storage = await getStorageInstance();
 
     let avatarUrl: string | null = null;
 
     if (avatar) {
       const imageRef = ref(storage, `avatars/${user.uid}.jpg`);
 
-      /**
+      // Upload disabled, kept for future
+      /*
       const img = await fetch(avatar);
       const bytes = await img.blob();
       await uploadBytes(imageRef, bytes);
@@ -125,6 +129,7 @@ try {
     Alert.alert("Error", error.message);
   }
 };
+
 
 
   /* ---------- Animations ---------- */

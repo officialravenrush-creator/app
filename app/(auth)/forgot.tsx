@@ -91,7 +91,7 @@ function ForgotPasswordScreen() {
   setLoading(true);
   try {
     const { getAuthInstance } = await import("../../firebase/firebaseConfig");
-    const auth = getAuthInstance();
+    const auth = await getAuthInstance();
 
     await sendPasswordResetEmail(auth, email.trim());
     setSuccessMsg("Verification code sent to your email.");
@@ -114,7 +114,7 @@ function ForgotPasswordScreen() {
   setLoading(true);
   try {
     const { getAuthInstance } = await import("../../firebase/firebaseConfig");
-    const auth = getAuthInstance();
+    const auth = await  getAuthInstance();
 
     await verifyPasswordResetCode(auth, code.trim());
     setSuccessMsg("Code verified! Enter your new password.");
@@ -136,7 +136,7 @@ function ForgotPasswordScreen() {
   setLoading(true);
   try {
     const { getAuthInstance } = await import("../../firebase/firebaseConfig");
-    const auth = getAuthInstance();
+    const auth = await getAuthInstance();
 
     await confirmPasswordReset(auth, code.trim(), newPass);
     Alert.alert("Success", "Your password has been reset.");

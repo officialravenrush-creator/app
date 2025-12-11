@@ -51,15 +51,17 @@ function LoginScreen() {
     setErrorMsg("");
 
     try {
-      const firebase = await import("../../firebase/firebaseConfig");
+    const firebase = await import("../../firebase/firebaseConfig");
 
-const auth = firebase.getAuthInstance();
-const db = firebase.db;
+const auth = await firebase.getAuthInstance();
+const db = await firebase.getDb();   // ✅ CORRECT
 
-// 🔥 Disable Recaptcha for Expo
+
+// 🔥 Disable Recaptcha for Expo (auth.settings exists on RN Firebase)
 if (auth.settings) {
   auth.settings.appVerificationDisabledForTesting = true;
 }
+
 
 
       // 🔥 Email login (Recaptcha bypass works)

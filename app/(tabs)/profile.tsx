@@ -20,16 +20,16 @@ export default function Profile() {
 }
 
 /* -------------------------------------------------
-    🔥 LAZY LOADING FIREBASE (NO STATIC IMPORTS)
+    🔥 Correct Lazy Firebase Loader
 -------------------------------------------------- */
 async function loadFirebase() {
   const firebase = await import("../../firebase/firebaseConfig");
+
   return {
-    auth: firebase.getAuthInstance(),
-    db: firebase.db,
+    getAuth: firebase.getAuthInstance,
+    getDb: firebase.getDb,
   };
 }
-
 
 /* ---------- Main Screen ---------- */
 function ProfileScreen() {
@@ -40,7 +40,7 @@ function ProfileScreen() {
 
   const fade = useRef(new Animated.Value(0)).current;
 
-  /* ---------- Page Fade Animation ---------- */
+  /* ---------- Fade Animation ---------- */
   useEffect(() => {
     Animated.timing(fade, {
       toValue: 1,
@@ -50,19 +50,20 @@ function ProfileScreen() {
     }).start();
   }, []);
 
-  /* ---------- Mount Guard ---------- */
+  /* ---------- Mount Listener ---------- */
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
 
   /* -------------------------------------------------
-      🔥 Lazy Load Auth + Set UID Once
+      🔥 Load Auth & Set UID
   -------------------------------------------------- */
   useEffect(() => {
     (async () => {
       try {
-        const { auth } = await loadFirebase();
+        const { getAuth } = await loadFirebase();
+        const auth = await getAuth();
         const user = auth.currentUser;
         setUid(user?.uid ?? null);
       } catch (err) {
@@ -73,7 +74,7 @@ function ProfileScreen() {
   }, []);
 
   /* -------------------------------------------------
-      🔥 Lazy Load Firestore Listener
+      🔥 Firestore Listener
   -------------------------------------------------- */
   useEffect(() => {
     if (!uid) {
@@ -85,7 +86,9 @@ function ProfileScreen() {
 
     const listen = async () => {
       try {
-        const { db } = await loadFirebase();
+        const { getDb } = await loadFirebase();
+        const db = await getDb();
+
         const { doc, onSnapshot } = await import("firebase/firestore");
 
         const ref = doc(db, "users", uid);
@@ -98,35 +101,31 @@ function ProfileScreen() {
             setLoading(false);
           },
           (error) => {
-            console.log("🔥 Snapshot error:", error);
+            console.log("Snapshot error:", error);
             if (mounted) setLoading(false);
           }
         );
       } catch (err) {
-        console.log("🔥 Lazy Firestore error:", err);
+        console.log("Lazy Firestore error:", err);
         if (mounted) setLoading(false);
       }
     };
 
     listen();
 
-    return () => {
-      if (unsub) unsub();
-    };
+    return () => unsub && unsub();
   }, [uid, mounted]);
 
   /* ---------- No UID ---------- */
   if (!uid) {
     return (
       <View style={styles.centered}>
-        <Text style={{ color: "#fff", fontSize: 18 }}>
-          User not logged in.
-        </Text>
+        <Text style={{ color: "#fff", fontSize: 18 }}>User not logged in.</Text>
       </View>
     );
   }
 
-  /* ---------- While Loading ---------- */
+  /* ---------- Loading ---------- */
   if (loading || !data) {
     return (
       <View style={styles.centered}>
@@ -135,7 +134,7 @@ function ProfileScreen() {
     );
   }
 
-  /* ---------- Safe Access ---------- */
+  /* ---------- Safe Data Access ---------- */
   const username = data?.username ?? "Unknown User";
   const referralCode = data?.referralCode ?? "";
   const referredBy = data?.referredBy ?? "Not referred";
@@ -197,7 +196,7 @@ function ProfileScreen() {
         {/* Referred By */}
         <Card label="Referred By" value={referredBy} />
 
-        {/* Referral Count */}
+        {/* Referrals */}
         <View style={styles.refCard}>
           <Ionicons name="people" size={28} color="#34D399" />
           <View>

@@ -10,7 +10,7 @@ export interface UserProfile {
 }
 
 // MINING DATA
-export interface MiningData {
+export interface MiningData {c
   miningActive: boolean;
   lastStart: Timestamp | null;
   lastClaim: Timestamp | null;
