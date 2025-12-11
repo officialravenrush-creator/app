@@ -1,17 +1,13 @@
-// firebaseConfig.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
-
 import {
   initializeAuth,
   getReactNativePersistence,
+  getAuth,
 } from "firebase/auth/react-native";
-
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Firebase config
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY!,
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN!,
@@ -21,26 +17,27 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID!,
 };
 
-// Prevent double initialization
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// ✔ No _auth
-// ✔ No preload crash
-// ✔ No TS errors
-// ✔ No web auth usage
-let authInstance: any;
+// --------------------------------------------
+// LAZY AUTH (DOES NOT RUN DURING IMPORT)
+// --------------------------------------------
+let authInstance: ReturnType<typeof initializeAuth> | null = null;
 
 export const getAuthInstance = () => {
-  if (!authInstance) {
+  if (authInstance) return authInstance;
+
+  try {
     authInstance = initializeAuth(app, {
       persistence: getReactNativePersistence(AsyncStorage),
     });
+  } catch (e) {
+    authInstance = getAuth(app);
   }
+
   return authInstance;
 };
 
-
+// --------------------------------------------
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-
-export { app };

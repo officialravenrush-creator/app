@@ -11,13 +11,20 @@ import { useEffect, useRef, useState, useMemo } from "react";
 
 import { claimDailyReward } from "../firebase/user";
 import { useMining } from "../hooks/useMining";
-import { useInterstitialAd } from "react-native-google-mobile-ads";
 
 /* -----------------------------------------------
    🔥 LAZY FIREBASE IMPORTS — FIXED PATH
 ------------------------------------------------ */
 const getAuth = async () =>
   (await import("../firebase/firebaseConfig")).getAuthInstance();
+
+/* -----------------------------------------------
+   🔥 LAZY GOOGLE ADS IMPORT (SAFE FOR EXPO GO)
+------------------------------------------------ */
+const loadInterstitialHook = async () => {
+  const mod = await import("react-native-google-mobile-ads");
+  return mod.useInterstitialAd;
+};
 
 type DailyClaimProps = {
   visible: boolean;
@@ -80,20 +87,44 @@ export default function DailyClaim({ visible, onClose }: DailyClaimProps) {
     if (!uid && visible) onClose?.();
   }, [uid, visible, onClose]);
 
-  /* -------------------------------------------------
-     Interstitial Ad Setup
-  -------------------------------------------------- */
-  const adUnitId = __DEV__
-    ? "ca-app-pub-3940256099942544/1033173712"
-    : "ca-app-pub-4533962949749202/2761859275";
+/* -------------------------------------------------
+   Interstitial Ad Setup (SAFE LAZY IMPORT)
+-------------------------------------------------- */
+const adUnitId = __DEV__
+  ? "ca-app-pub-3940256099942544/1033173712"
+  : "ca-app-pub-4533962949749202/2761859275";
 
-  const { isLoaded, isClosed, load, show } = useInterstitialAd(adUnitId, {
-    requestNonPersonalizedAdsOnly: true,
-  });
+const [adState, setAdState] = useState({
+  isLoaded: false,
+  isClosed: false,
+  load: () => {},
+  show: () => {},
+});
+
+/* Load hook lazily */
+useEffect(() => {
+  let mounted = true;
+
+  (async () => {
+    const hook = await loadInterstitialHook();
+    const ads = hook(adUnitId, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+
+    if (mounted) setAdState(ads);
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [adUnitId]);
+
+
+  const { isLoaded, isClosed, load, show } = adState;
 
   useEffect(() => {
-    if (visible && !isLoaded) load();
-  }, [visible, isLoaded]);
+    if (visible && isLoaded === false) load?.();
+  }, [visible, isLoaded, load]);
 
   /* -------------------------------------------------
      Cooldown Timer
@@ -170,11 +201,11 @@ export default function DailyClaim({ visible, onClose }: DailyClaimProps) {
     setLoading(true);
 
     if (!isLoaded) {
-      load();
+      load?.();
       return;
     }
 
-    show();
+    show?.();
   };
 
   const streak = dailyClaim?.streak ?? 0;
