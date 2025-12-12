@@ -11,12 +11,10 @@ import {
   TouchableOpacity,
 } from "react-native";
 
-import { createUserWithEmailAndPassword } from "firebase/auth";
-
+// Removed Firebase imports and replaced with Supabase client
+import { supabase } from "../../supabase/client";
 
 import { Link, useRouter } from "expo-router";
-
-import { doc, getDoc } from "firebase/firestore";
 
 import Animated, {
   FadeInUp,
@@ -62,50 +60,59 @@ function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-  if (loading) return;
+    if (loading) return;
 
-  if (!email.trim() || !password || !confirm) {
-    return triggerError("All fields are required");
-  }
-
-  if (password !== confirm) return triggerError("Passwords do not match");
-  if (password.length < 6)
-    return triggerError("Password must be at least 6 characters");
-
-  setLoading(true);
-  setErrorMsg("");
-
-  try {
-    // Lazy import Firebase
-    const firebase = await import("../../firebase/firebaseConfig");
-
-    const auth = await firebase.getAuthInstance();  // ✅ FIXED
-    const db = await firebase.getDb();              // ✅ FIXED
-
-    // Create user
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
-      email.trim(),
-      password
-    );
-
-    const user = userCredential.user;
-
-    // Check if user profile exists
-    const profileSnap = await getDoc(doc(db, "users", user.uid));
-
-    if (!profileSnap.exists()) {
-      router.replace("/(auth)/profileSetup");
-    } else {
-      router.replace("/(tabs)");
+    if (!email.trim() || !password || !confirm) {
+      return triggerError("All fields are required");
     }
 
-  } catch (err: any) {
-    triggerError(err.message);
-  }
+    if (password !== confirm) return triggerError("Passwords do not match");
+    if (password.length < 6)
+      return triggerError("Password must be at least 6 characters");
 
-  setLoading(false);
-};
+    setLoading(true);
+    setErrorMsg("");
+
+    try {
+      // Create user in Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        throw new Error(error.message || "Registration failed");
+      }
+
+      const user = data.user;
+      if (!user) throw new Error("User was not created.");
+
+      const uid = user.id;
+
+      // Check if profile exists in user_profiles table
+      const { data: profile, error: profileErr } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("user_id", uid)
+        .maybeSingle();
+
+      if (profileErr) {
+        // Non-fatal: surface error and navigate to profile setup to let user continue
+        console.warn("profile lookup error:", profileErr);
+      }
+
+      // If there's no profile row, send user to profile setup (same behavior as before)
+      if (!profile) {
+        router.replace("/(auth)/profileSetup");
+      } else {
+        router.replace("/(tabs)");
+      }
+    } catch (err: any) {
+      triggerError(err?.message ?? "Registration failed");
+    }
+
+    setLoading(false);
+  };
 
 
   return (

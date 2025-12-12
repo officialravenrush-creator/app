@@ -9,22 +9,9 @@ import {
 } from "react-native";
 import { useEffect, useRef, useState, useMemo } from "react";
 
-import { claimDailyReward } from "../firebase/user";
+import { claimDailyReward } from "../services/user";
 import { useMining } from "../hooks/useMining";
-
-/* -----------------------------------------------
-   🔥 LAZY FIREBASE IMPORTS — FIXED PATH
------------------------------------------------- */
-const getAuth = async () =>
-  (await import("../firebase/firebaseConfig")).getAuthInstance();
-
-/* -----------------------------------------------
-   🔥 LAZY GOOGLE ADS IMPORT (SAFE FOR EXPO GO)
------------------------------------------------- */
-const loadInterstitialHook = async () => {
-  const mod = await import("react-native-google-mobile-ads");
-  return mod.useInterstitialAd;
-};
+import { supabase } from "../supabase/client";
 
 type DailyClaimProps = {
   visible: boolean;
@@ -47,19 +34,16 @@ export default function DailyClaim({ visible, onClose }: DailyClaimProps) {
   const [uid, setUid] = useState<string | null>(null);
 
   /* -------------------------------------------------
-     🔥 Correct Auth listener (uses RN instance)
+     Supabase auth listener
   -------------------------------------------------- */
   useEffect(() => {
-    let unsub: any;
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      setUid(session?.user?.id ?? null);
+    });
 
-    (async () => {
-      const auth = await getAuth();
-      unsub = auth.onAuthStateChanged((u: any) => {
-        setUid(u?.uid ?? null);
-      });
-    })();
-
-    return () => unsub?.();
+    return () => {
+      data?.subscription?.unsubscribe();
+    };
   }, []);
 
   /* -------------------------------------------------
@@ -87,38 +71,41 @@ export default function DailyClaim({ visible, onClose }: DailyClaimProps) {
     if (!uid && visible) onClose?.();
   }, [uid, visible, onClose]);
 
-/* -------------------------------------------------
-   Interstitial Ad Setup (SAFE LAZY IMPORT)
--------------------------------------------------- */
-const adUnitId = __DEV__
-  ? "ca-app-pub-3940256099942544/1033173712"
-  : "ca-app-pub-4533962949749202/2761859275";
+  /* -------------------------------------------------
+     Interstitial Ad Setup
+  -------------------------------------------------- */
+  const adUnitId = __DEV__
+    ? "ca-app-pub-3940256099942544/1033173712"
+    : "ca-app-pub-4533962949749202/2761859275";
 
-const [adState, setAdState] = useState({
-  isLoaded: false,
-  isClosed: false,
-  load: () => {},
-  show: () => {},
-});
+  const [adState, setAdState] = useState({
+    isLoaded: false,
+    isClosed: false,
+    load: () => {},
+    show: () => {},
+  });
 
-/* Load hook lazily */
-useEffect(() => {
-  let mounted = true;
-
-  (async () => {
-    const hook = await loadInterstitialHook();
-    const ads = hook(adUnitId, {
-      requestNonPersonalizedAdsOnly: true,
-    });
-
-    if (mounted) setAdState(ads);
-  })();
-
-  return () => {
-    mounted = false;
+  const loadInterstitialHook = async () => {
+    const mod = await import("react-native-google-mobile-ads");
+    return mod.useInterstitialAd;
   };
-}, [adUnitId]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      const hook = await loadInterstitialHook();
+      const ads = hook(adUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      if (mounted) setAdState(ads);
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [adUnitId]);
 
   const { isLoaded, isClosed, load, show } = adState;
 
@@ -127,35 +114,47 @@ useEffect(() => {
   }, [visible, isLoaded, load]);
 
   /* -------------------------------------------------
-     Cooldown Timer
-  -------------------------------------------------- */
-  useEffect(() => {
-    if (!dailyClaim?.lastClaim) {
-      setCooldownMs(0);
-      return;
+   Cooldown Timer (final patched & TS-safe)
+-------------------------------------------------- */
+useEffect(() => {
+  const raw = dailyClaim?.last_claim; // <-- FIXED snake_case
+
+  if (!raw) {
+    setCooldownMs(0);
+    return;
+  }
+
+  let lastMs = 0;
+
+  try {
+    if (typeof raw === "number") {
+      lastMs = raw;
     }
-
-    let lastMs = 0;
-    try {
-      if ((dailyClaim.lastClaim as any)?.toMillis) {
-        lastMs = dailyClaim.lastClaim.toMillis();
-      } else {
-        lastMs = Number(dailyClaim.lastClaim) || 0;
-      }
-    } catch {
-      lastMs = 0;
+    // ISO date OR Date object OR string timestamp
+    else if (!isNaN(Date.parse(String(raw)))) {
+      lastMs = Date.parse(String(raw));
     }
+    // Fallback
+    else {
+      lastMs = Number(raw) || 0;
+    }
+  } catch {
+    lastMs = 0;
+  }
 
-    const DAY = 24 * 3600 * 1000;
+  const DAY = 24 * 3600 * 1000;
 
-    const iv = setInterval(() => {
-      if (!mountedRef.current) return;
-      const remain = Math.max(0, DAY - (Date.now() - lastMs));
-      setCooldownMs(remain);
-    }, 30_000);
+  const updateCooldown = () => {
+    if (!mountedRef.current) return;
+    const remain = Math.max(0, DAY - (Date.now() - lastMs));
+    setCooldownMs(remain);
+  };
 
-    return () => clearInterval(iv);
-  }, [dailyClaim?.lastClaim]);
+  updateCooldown(); // run immediately
+
+  const iv = setInterval(updateCooldown, 30_000);
+  return () => clearInterval(iv);
+}, [dailyClaim?.last_claim]);
 
   /* -------------------------------------------------
      Reward AFTER ad closes
@@ -164,16 +163,20 @@ useEffect(() => {
     try {
       if (!uid || !mountedRef.current) return;
 
-      const reward = await claimDailyReward(uid);
+      setLoading(true);
+      const res = await claimDailyReward(uid);
 
       if (!mountedRef.current) return;
+
+      const reward =
+        res && typeof res === "object" ? res.reward ?? 0 : Number(res || 0);
 
       if (reward === 0) {
         setMessage("Already claimed for today.");
       } else {
         setMessage(`+${reward.toFixed(1)} VAD added to your balance!`);
       }
-    } catch {
+    } catch (err) {
       if (mountedRef.current) setMessage("Claim failed. Try again.");
     } finally {
       if (mountedRef.current) setLoading(false);

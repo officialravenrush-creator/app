@@ -1,9 +1,6 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useRef,
-} from "react";
+// components/watchEarn.tsx
+
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,26 +10,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 
-/* -------------------------------
-   🔥 LAZY IMPORT HELPERS
---------------------------------*/
-const lazyFirebaseAuth = async () =>
-  (await import("firebase/auth")).getAuth();
-
-const lazyFirebaseFirestore = async () =>
-  await import("firebase/firestore");
-
-const lazyGetFirestore = async () =>
-  (await import("firebase/firestore")).getFirestore();
-
-const lazyShowRewardedAd = async () =>
-  (await import("./RewardedAd")).showRewardedAd;
-
-const lazyClaimReward = async () =>
-  (await import("../firebase/user")).claimWatchEarnReward;
+import { supabase } from "../supabase/client";
+import { showRewardedAd } from "./RewardedAd";
+import { claimWatchEarnReward } from "../services/user"; // <-- SUPABASE version
 
 /* -------------------------------
-   🔥 COMPONENT
+   COMPONENT
 --------------------------------*/
 type Props = {
   visible?: boolean;
@@ -50,22 +33,19 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
   }, []);
 
   /* -------------------------------
-     AUTH STATE LISTENER
+     AUTH STATE LISTENER (SUPABASE)
   --------------------------------*/
   const [uid, setUid] = useState<string | null>(null);
 
   useEffect(() => {
-    let unsub: any;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted.current) return;
+      setUid(session?.user?.id ?? null);
+    });
 
-    (async () => {
-      const auth = await lazyFirebaseAuth();
-      unsub = auth.onAuthStateChanged((user) => {
-        if (!mounted.current) return;
-        setUid(user?.uid ?? null);
-      });
-    })();
-
-    return () => unsub?.();
+    return () => {
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   /* -------------------------------
@@ -88,37 +68,62 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
   }, [visible, uid]);
 
   /* -------------------------------
-     REALTIME FIRESTORE
+     REALTIME SUPABASE LISTENER
   --------------------------------*/
   useEffect(() => {
     if (!uid) return;
 
-    let unsub: any;
+    // Load initial stats
+    const loadStats = async () => {
+      const { data } = await supabase
+        .from("users")
+        .select("watchEarn")
+        .eq("id", uid)
+        .single();
 
-    (async () => {
-      const db = await lazyGetFirestore();
-      const firestore = await lazyFirebaseFirestore();
-      const { doc, onSnapshot } = firestore;
+      if (!mounted.current || !data) return;
 
-      const ref = doc(db, "users", uid);
+      const w = data.watchEarn ?? {};
 
-      unsub = onSnapshot(ref, (snap) => {
-        if (!mounted.current || !snap.exists()) return;
-
-        const d = snap.data()?.watchEarn ?? {};
-
-        setStats({
-          totalWatched: d.totalWatched ?? 0,
-          totalEarned: d.totalEarned ?? 0,
-        });
+      setStats({
+        totalWatched: w.totalWatched ?? 0,
+        totalEarned: w.totalEarned ?? 0,
       });
-    })();
+    };
 
-    return () => unsub?.();
+    loadStats();
+
+    // Listen for updates
+    const channel = supabase
+      .channel(`watchEarn-updates-${uid}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "users",
+          filter: `id=eq.${uid}`,
+        },
+        (payload) => {
+          if (!mounted.current) return;
+
+          const w = payload.new?.watchEarn ?? {};
+
+          setStats({
+            totalWatched: w.totalWatched ?? 0,
+            totalEarned: w.totalEarned ?? 0,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [uid]);
 
   /* -------------------------------
-     WATCH AD FLOW
+     WATCH AD FLOW (SUPABASE)
   --------------------------------*/
   const handleWatch = useCallback(async () => {
     if (!uid || loading) return;
@@ -128,13 +133,10 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
       setCompleted(false);
       setMessage("");
 
-      const showRewardedAd = await lazyShowRewardedAd();
-      const claimReward = await lazyClaimReward();
-
-      await showRewardedAd();
+      await showRewardedAd(); // SAME as firebase behavior
       if (!mounted.current) return;
 
-      const reward = await claimReward(uid);
+      const reward = await claimWatchEarnReward(uid);
       if (!mounted.current) return;
 
       setCompleted(true);
@@ -152,6 +154,10 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
     if (!loading) onClose?.();
   }, [loading, onClose]);
 
+
+  /* -------------------------------
+     UI
+  --------------------------------*/
   if (!visible) return null;
 
   const { totalWatched, totalEarned } = stats;
@@ -166,9 +172,7 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
       <View style={styles.overlay}>
         <View style={styles.card}>
           <Text style={styles.title}>🎥 Watch & Earn</Text>
-          <Text style={styles.sub}>
-            Optional rewarded ads for instant VAD
-          </Text>
+          <Text style={styles.sub}>Optional rewarded ads for instant VAD</Text>
 
           <View style={styles.rewardBox}>
             <Text style={styles.reward}>+0.25 VAD</Text>
@@ -181,9 +185,7 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
               <Text style={styles.statLabel}>Ads Watched</Text>
             </View>
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {totalEarned.toFixed(2)}
-              </Text>
+              <Text style={styles.statValue}>{totalEarned.toFixed(2)}</Text>
               <Text style={styles.statLabel}>VAD Earned</Text>
             </View>
           </View>
@@ -192,17 +194,12 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
             <Pressable
               onPress={handleWatch}
               disabled={loading}
-              style={[
-                styles.watchBtn,
-                loading && { opacity: 0.6 },
-              ]}
+              style={[styles.watchBtn, loading && { opacity: 0.6 }]}
             >
               {loading ? (
                 <View style={{ flexDirection: "row" }}>
                   <ActivityIndicator />
-                  <Text
-                    style={[styles.watchText, { marginLeft: 10 }]}
-                  >
+                  <Text style={[styles.watchText, { marginLeft: 10 }]}>
                     Loading ad...
                   </Text>
                 </View>
@@ -216,9 +213,7 @@ export default function WatchEarn({ visible = false, onClose }: Props) {
             </Pressable>
           )}
 
-          {message ? (
-            <Text style={styles.message}>{message}</Text>
-          ) : null}
+          {message ? <Text style={styles.message}>{message}</Text> : null}
 
           {!loading && !completed && (
             <Pressable onPress={onClose} style={styles.skipBtn}>

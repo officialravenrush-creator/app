@@ -11,9 +11,10 @@ import {
   Pressable,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
+
+// Supabase client
+import { supabase } from "../../supabase/client";
 
 /* ---------- Expo Router Wrapper ---------- */
 export default function Login() {
@@ -51,23 +52,19 @@ function LoginScreen() {
     setErrorMsg("");
 
     try {
-    const firebase = await import("../../firebase/firebaseConfig");
+      // Supabase sign in
+      const resp = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
 
-const auth = await firebase.getAuthInstance();
-const db = await firebase.getDb();   // ✅ CORRECT
+      if (resp.error) {
+        // Surface friendly messages
+        const msg = resp.error.message || "Login failed.";
+        throw new Error(msg);
+      }
 
-
-// 🔥 Disable Recaptcha for Expo (auth.settings exists on RN Firebase)
-if (auth.settings) {
-  auth.settings.appVerificationDisabledForTesting = true;
-}
-
-
-
-      // 🔥 Email login (Recaptcha bypass works)
-      await signInWithEmailAndPassword(auth, email.trim(), password.trim());
-
-      const user = auth.currentUser;
+      const user = resp.data.user;
 
       if (!user) {
         triggerError("Login failed. Try again.");
@@ -75,33 +72,36 @@ if (auth.settings) {
         return;
       }
 
-      // Check user doc
-      const userRef = doc(db, "users", user.uid);
-      const docSnap = await getDoc(userRef);
+      // Check profile in user_profiles table (same table name used in profileSetup)
+      const { data: profile, error: profileErr } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      if (!docSnap.exists()) {
+      if (profileErr) {
+        // Non-fatal: log and proceed to profileSetup to be safe
+        console.warn("profile lookup error:", profileErr);
+      }
+
+      if (!profile) {
         router.replace("/(auth)/profileSetup");
       } else {
         router.replace("/(tabs)");
       }
     } catch (error: any) {
-      let msg = "Login failed.";
+      // Map a few common Supabase messages to nicer strings
+      const message = (error?.message || "").toLowerCase();
 
-      switch (error.code) {
-        case "auth/user-not-found":
-          msg = "No account found.";
-          break;
-        case "auth/wrong-password":
-          msg = "Incorrect password.";
-          break;
-        case "auth/invalid-email":
-          msg = "Invalid email.";
-          break;
-        default:
-          msg = error.message;
+      if (message.includes("invalid login credentials") || message.includes("invalid credentials")) {
+        triggerError("Incorrect email or password.");
+      } else if (message.includes("user not found") || message.includes("no user")) {
+        triggerError("No account found.");
+      } else if (message.includes("invalid email")) {
+        triggerError("Invalid email.");
+      } else {
+        triggerError(error?.message ?? "Login failed.");
       }
-
-      triggerError(msg);
     }
 
     setLoading(false);
@@ -218,5 +218,3 @@ const styles = StyleSheet.create({
   text: { color: "#aaa" },
   link: { color: "#5b3deb", fontWeight: "bold" },
 });
-
-

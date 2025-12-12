@@ -12,13 +12,14 @@ import {
   Platform,
   Animated,
   Easing,
+  Image,
 } from "react-native";
 
-import * as ImagePicker from "expo-image-picker"; // 🔒 Kept for future re-enable
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 
-// Firebase
-
+// 🔥 Supabase client
+import { supabase } from "../../supabase/client";
 
 /* ---------- Expo Router Wrapper ---------- */
 export default function ProfileSetup() {
@@ -30,36 +31,31 @@ function ProfileSetupScreen() {
   const router = useRouter();
 
   const [username, setUsername] = useState("");
-  const [avatar, setAvatar] = useState<string | null>(null); // 🔒 Logic kept
+  const [avatar, setAvatar] = useState<string | null>(null);
   const [referredBy, setReferredBy] = useState("");
+  const [user, setUser] = useState<any>(null);
 
-const [user, setUser] = useState<any>(null);
+  /* ------------------------------------------------------------------
+     AUTH CHECK (Supabase)
+  ------------------------------------------------------------------ */
+  useEffect(() => {
+    const session = supabase.auth.getSession().then(({ data }) => {
+      const current = data.session?.user ?? null;
+      setUser(current);
 
-useEffect(() => {
-  (async () => {
-    const { getAuthInstance } = await import("../../firebase/firebaseConfig");
-    const auth = await getAuthInstance();
+      if (!current) router.replace("/(auth)/login");
+    });
+  }, []);
 
-    setUser(auth.currentUser);
-
-    if (!auth.currentUser) {
-      router.replace("/(auth)/login");
-    }
-  })();
-}, []);
-
-
-
-
-
-  /** Crash-proof: redirect if no auth user */
   useEffect(() => {
     if (!user) router.replace("/(auth)/login");
   }, [user]);
 
-  const referralCode = user?.uid?.slice(0, 8) ?? "loading";
+  const referralCode = user?.id?.slice(0, 8) ?? "loading";
 
-  // 🔒 Avatar logic preserved, but unused in UI
+  /* ------------------------------------------------------------------
+     PICK AVATAR (UI logic preserved)
+  ------------------------------------------------------------------ */
   const pickAvatar = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -77,62 +73,76 @@ useEffect(() => {
     }
   };
 
- const saveProfile = async () => {
-  if (!username.trim()) {
-    Alert.alert("Error", "Username is required");
-    return;
-  }
+  /* ------------------------------------------------------------------
+     UPLOAD AVATAR TO SUPABASE STORAGE
+  ------------------------------------------------------------------ */
+  const uploadAvatar = async (userId: string) => {
+    if (!avatar) return null;
 
-  try {
-    // Lazy import Firebase pieces
-    const { getAuthInstance, getDb, getStorageInstance } = await import("../../firebase/firebaseConfig");
-    const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
-    const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
+    try {
+      const ext = avatar.split(".").pop();
+      const path = `avatars/${userId}.${ext}`;
 
-    const auth = await getAuthInstance();
-    const user = auth.currentUser;
-
-    if (!user) {
-      Alert.alert("Error", "Not authenticated");
-      return router.replace("/(auth)/login");
-    }
-
-    const db = await getDb();
-    const storage = await getStorageInstance();
-
-    let avatarUrl: string | null = null;
-
-    if (avatar) {
-      const imageRef = ref(storage, `avatars/${user.uid}.jpg`);
-
-      // Upload disabled, kept for future
-      /*
       const img = await fetch(avatar);
       const bytes = await img.blob();
-      await uploadBytes(imageRef, bytes);
-      avatarUrl = await getDownloadURL(imageRef);
-      */
+
+      const { error: uploadErr } = await supabase.storage
+        .from("avatars") // make sure your bucket is named "avatars"
+        .upload(path, bytes, { upsert: true });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: publicURL } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(path);
+
+      return publicURL.publicUrl;
+    } catch (error) {
+      console.log("Upload error:", error);
+      return null;
+    }
+  };
+
+  /* ------------------------------------------------------------------
+     SAVE PROFILE TO SUPABASE (Firestore → Supabase table)
+  ------------------------------------------------------------------ */
+  const saveProfile = async () => {
+    if (!username.trim()) {
+      Alert.alert("Error", "Username is required");
+      return;
     }
 
-    await setDoc(doc(db, "users", user.uid), {
-      username: username.trim(),
-      avatarUrl,
-      referralCode: user.uid.slice(0, 8),
-      referredBy: referredBy.trim() || null,
-      createdAt: serverTimestamp(),
-    });
+    try {
+      if (!user) {
+        Alert.alert("Error", "Not authenticated");
+        return router.replace("/(auth)/login");
+      }
 
-    Alert.alert("Success", "Profile saved!");
-    router.replace("/(tabs)");
+      // Upload avatar to Supabase
+      const avatarUrl = await uploadAvatar(user.id);
 
-  } catch (error: any) {
-    Alert.alert("Error", error.message);
-  }
-};
+      // Insert / update user profile
+      const { error } = await supabase.from("user_profiles").upsert({
+        user_id: user.id,
+        username: username.trim(),
+        avatar_url: avatarUrl,
+        referred_by: referredBy.trim() || null,
+        referral_code: user.id.slice(0, 8),
+        created_at: new Date().toISOString(),
+      });
 
+      if (error) throw error;
 
+      Alert.alert("Success", "Profile saved!");
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Profile save failed");
+    }
+  };
 
-  /* ---------- Animations ---------- */
+  /* ------------------------------------------------------------------
+     ANIMATIONS (unchanged)
+  ------------------------------------------------------------------ */
   const titleAnim = useRef(new Animated.Value(0)).current;
   const fieldsAnim = useRef(new Animated.Value(0)).current;
   const buttonAnim = useRef(new Animated.Value(0)).current;
@@ -171,6 +181,9 @@ useEffect(() => {
       useNativeDriver: true,
     }).start();
 
+  /* ------------------------------------------------------------------
+     UI (UNCHANGED — avatar UI re-enabled)
+  ------------------------------------------------------------------ */
   return (
     <KeyboardAvoidingView
       behavior={Platform.select({ ios: "padding", android: undefined })}
@@ -195,7 +208,7 @@ useEffect(() => {
       >
         <Text style={styles.title}>Complete your profile</Text>
         <Text style={styles.subtitle}>
-          Pick a username and (optionally) a referral code.
+          Pick a username and upload your avatar.
         </Text>
       </Animated.View>
 
@@ -216,9 +229,16 @@ useEffect(() => {
           },
         ]}
       >
-        {/* 🔥 AVATAR UI REMOVED COMPLETELY  
-            (logic still exists above)
-        */}
+        {/* 🔥 Avatar Picker */}
+        <TouchableOpacity onPress={pickAvatar} style={styles.avatarContainer}>
+          {avatar ? (
+            <Image source={{ uri: avatar }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={{ color: "#777" }}>Pick Avatar</Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
         {/* Username */}
         <Text style={styles.label}>Username</Text>
@@ -282,6 +302,10 @@ useEffect(() => {
   );
 }
 
+/* ------------------------------------------------------------------
+   STYLES (unchanged — added avatar styles)
+------------------------------------------------------------------ */
+
 const BLUE = "#377dff";
 const DARK = "#000000";
 const CARD = "#0b0b0b";
@@ -305,6 +329,24 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     elevation: 2,
+  },
+
+  avatarContainer: {
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+  },
+  avatarPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   label: {
