@@ -1,4 +1,4 @@
-// app/auth/profileSetup.tsx
+// app/(auth)/profileSetup.tsx
 
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -33,28 +33,21 @@ function ProfileSetupScreen() {
   const [username, setUsername] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [referredBy, setReferredBy] = useState("");
-  const [user, setUser] = useState<any>(null);
+  const [referralCode, setReferralCode] = useState("");
 
   /* ------------------------------------------------------------------
-     AUTH CHECK (Supabase)
+     REFERRAL CODE GENERATION (UNIQUE)
   ------------------------------------------------------------------ */
-  useEffect(() => {
-    const session = supabase.auth.getSession().then(({ data }) => {
-      const current = data.session?.user ?? null;
-      setUser(current);
+  const generateReferralCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
 
-      if (!current) router.replace("/(auth)/login");
-    });
+  useEffect(() => {
+    setReferralCode(generateReferralCode());
   }, []);
 
-  useEffect(() => {
-    if (!user) router.replace("/(auth)/login");
-  }, [user]);
-
-  const referralCode = user?.id?.slice(0, 8) ?? "loading";
-
   /* ------------------------------------------------------------------
-     PICK AVATAR (UI logic preserved)
+     PICK AVATAR
   ------------------------------------------------------------------ */
   const pickAvatar = async () => {
     try {
@@ -87,16 +80,16 @@ function ProfileSetupScreen() {
       const bytes = await img.blob();
 
       const { error: uploadErr } = await supabase.storage
-        .from("avatars") // make sure your bucket is named "avatars"
+        .from("avatars")
         .upload(path, bytes, { upsert: true });
 
       if (uploadErr) throw uploadErr;
 
-      const { data: publicURL } = supabase.storage
+      const { data } = supabase.storage
         .from("avatars")
         .getPublicUrl(path);
 
-      return publicURL.publicUrl;
+      return data.publicUrl;
     } catch (error) {
       console.log("Upload error:", error);
       return null;
@@ -104,7 +97,7 @@ function ProfileSetupScreen() {
   };
 
   /* ------------------------------------------------------------------
-     SAVE PROFILE TO SUPABASE (Firestore → Supabase table)
+     SAVE PROFILE (WITH UNIQUE REFERRAL CODE)
   ------------------------------------------------------------------ */
   const saveProfile = async () => {
     if (!username.trim()) {
@@ -112,26 +105,45 @@ function ProfileSetupScreen() {
       return;
     }
 
-    try {
-      if (!user) {
-        Alert.alert("Error", "Not authenticated");
-        return router.replace("/(auth)/login");
-      }
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (!user) return;
 
-      // Upload avatar to Supabase
+    try {
       const avatarUrl = await uploadAvatar(user.id);
 
-      // Insert / update user profile
-      const { error } = await supabase.from("user_profiles").upsert({
-        user_id: user.id,
-        username: username.trim(),
-        avatar_url: avatarUrl,
-        referred_by: referredBy.trim() || null,
-        referral_code: user.id.slice(0, 8),
-        created_at: new Date().toISOString(),
-      });
+      let attempts = 0;
+      let saved = false;
+      let code = referralCode;
 
-      if (error) throw error;
+      while (!saved && attempts < 5) {
+        const { error } = await supabase.from("user_profiles").insert({
+          user_id: user.id,
+          username: username.trim(),
+          avatar_url: avatarUrl,
+          referred_by: referredBy.trim() || null,
+          referral_code: code,
+          created_at: new Date().toISOString(),
+        });
+
+        if (!error) {
+          saved = true;
+          break;
+        }
+
+        // 🔁 Retry on unique referral_code collision
+        if (error.code === "23505") {
+          code = generateReferralCode();
+          setReferralCode(code);
+          attempts++;
+        } else {
+          throw error;
+        }
+      }
+
+      if (!saved) {
+        throw new Error("Failed to generate unique referral code");
+      }
 
       Alert.alert("Success", "Profile saved!");
       router.replace("/(tabs)");
@@ -141,7 +153,7 @@ function ProfileSetupScreen() {
   };
 
   /* ------------------------------------------------------------------
-     ANIMATIONS (unchanged)
+     ANIMATIONS (UNCHANGED)
   ------------------------------------------------------------------ */
   const titleAnim = useRef(new Animated.Value(0)).current;
   const fieldsAnim = useRef(new Animated.Value(0)).current;
@@ -182,14 +194,13 @@ function ProfileSetupScreen() {
     }).start();
 
   /* ------------------------------------------------------------------
-     UI (UNCHANGED — avatar UI re-enabled)
+     UI (UNCHANGED)
   ------------------------------------------------------------------ */
   return (
     <KeyboardAvoidingView
       behavior={Platform.select({ ios: "padding", android: undefined })}
       style={styles.container}
     >
-      {/* HEADER */}
       <Animated.View
         style={[
           styles.headerContainer,
@@ -212,7 +223,6 @@ function ProfileSetupScreen() {
         </Text>
       </Animated.View>
 
-      {/* FORM */}
       <Animated.View
         style={[
           styles.card,
@@ -229,7 +239,6 @@ function ProfileSetupScreen() {
           },
         ]}
       >
-        {/* 🔥 Avatar Picker */}
         <TouchableOpacity onPress={pickAvatar} style={styles.avatarContainer}>
           {avatar ? (
             <Image source={{ uri: avatar }} style={styles.avatar} />
@@ -240,7 +249,6 @@ function ProfileSetupScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Username */}
         <Text style={styles.label}>Username</Text>
         <TextInput
           value={username}
@@ -251,7 +259,6 @@ function ProfileSetupScreen() {
           autoCapitalize="none"
         />
 
-        {/* Referral code */}
         <Text style={styles.label}>Referral Code (Optional)</Text>
         <TextInput
           value={referredBy}
@@ -262,14 +269,12 @@ function ProfileSetupScreen() {
           autoCapitalize="none"
         />
 
-        {/* Your referral code */}
         <Text style={styles.referralText}>
           Your Referral Code:{" "}
           <Text style={styles.referralCode}>{referralCode}</Text>
         </Text>
       </Animated.View>
 
-      {/* BUTTON */}
       <Animated.View
         style={[
           styles.footer,

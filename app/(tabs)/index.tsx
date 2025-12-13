@@ -30,7 +30,7 @@ import { supabase } from "../../supabase/client"; // <--- adjust path if needed
 /* ============================================================
    MAIN COMPONENT
 =============================================================== */
-export default function MiningDashboard() {
+export default function Index() {
   const router = useRouter();
   const {
     miningData,
