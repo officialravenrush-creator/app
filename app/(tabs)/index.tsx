@@ -30,8 +30,25 @@ import { supabase } from "../../supabase/client"; // <--- adjust path if needed
 /* ============================================================
    MAIN COMPONENT
 =============================================================== */
-export default function Index() {
+// ✅ Interfaces at TOP LEVEL (outside any function)
+interface MiningData {
+  miningActive: boolean;
+  balance: number;
+  lastStart?: number;
+}
+
+interface NewsItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  image?: string;
+  timestamp?: number;
+}
+
+// ✅ Component AFTER interfaces
+export default function Page() {
   const router = useRouter();
+
   const {
     miningData,
     userProfile,
@@ -41,6 +58,8 @@ export default function Index() {
     claim,
     getLiveBalance,
   } = useMining();
+
+ 
 
   /* ---------- constants ---------- */
   const { width } = Dimensions.get("window");
@@ -238,20 +257,6 @@ export default function Index() {
     },
   });
 
-  /* ---------- types ---------- */
-  interface MiningData {
-    miningActive: boolean;
-    balance: number;
-    lastStart?: number;
-  }
-
-  interface NewsItem {
-    id: string;
-    title: string;
-    subtitle?: string;
-    image?: string;
-    timestamp?: number;
-  }
 
   /* ---------- state ---------- */
   const animatedBalance = useRef(new Animated.Value(0)).current;
