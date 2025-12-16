@@ -5,10 +5,9 @@ import { View, ActivityIndicator } from "react-native";
 import { useAuth } from "../hooks/useAuth";
 
 export default function RootLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading, onboarded } = useAuth();
   const segments = useSegments();
 
-  // ⏳ Wait for auth state
   if (loading) {
     return (
       <View
@@ -24,20 +23,20 @@ export default function RootLayout() {
     );
   }
 
-  const group = segments[0]; // "(auth)" | "(onboarding)" | "(tabs)"
+  const group = segments[0];
 
-  // 🔒 Protect dashboard
+  // 🔒 Protect tabs
   if (!user && group === "(tabs)") {
     return <Redirect href="/(auth)/login" />;
   }
 
-  // 🚫 Logged-in users must not see auth pages
-  if (user && group === "(auth)") {
-    return <Redirect href="/(tabs)" />;
+  // 🚧 Logged-in but NOT onboarded → force onboarding
+  if (user && !onboarded && group !== "(onboarding)") {
+    return <Redirect href="/(onboarding)/profileSetup" />;
   }
 
-  // 🚫 Logged-in users must not see onboarding
-  if (user && group === "(onboarding)") {
+  // 🚫 Logged-in & onboarded → block auth + onboarding
+  if (user && onboarded && (group === "(auth)" || group === "(onboarding)")) {
     return <Redirect href="/(tabs)" />;
   }
 

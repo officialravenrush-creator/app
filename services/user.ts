@@ -134,73 +134,75 @@ export async function startMining(uid: string) {
     .update({
       mining_active: true,
       last_start: now,
+      last_claim: now, // 👈 important
     })
-    .eq("user_id", uid);
+    .eq("user_id", uid)
+    .eq("mining_active", false)
+    .select();
 
   if (error) throw error;
-  return data;
+  if (!data || data.length === 0)
+    throw new Error("Mining already active or record missing");
+
+  return data[0];
 }
 
 /* -------------------------------------------------------------
    STOP MINING
 ------------------------------------------------------------- */
 export async function stopMining(uid: string) {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("mining_data")
     .update({ mining_active: false })
     .eq("user_id", uid);
 
   if (error) throw error;
-  return data;
 }
+
 
 /* -------------------------------------------------------------
    CLAIM MINING REWARD
 ------------------------------------------------------------- */
 export async function claimMiningReward(uid: string) {
-  const fetch = await supabase
+  const { data, error } = await supabase
     .from("mining_data")
     .select("*")
     .eq("user_id", uid)
     .single();
 
-  if (fetch.error || !fetch.data) return 0;
+  if (error || !data) return 0;
+  if (!data.mining_active) return 0;
 
-  const mining = fetch.data as any;
-
-  if (!mining.last_start) return 0;
-
-  const lastStart = new Date(mining.last_start);
   const now = new Date();
+  const lastClaim = data.last_claim
+    ? new Date(data.last_claim)
+    : new Date(data.last_start);
 
-  const elapsedMs = now.getTime() - lastStart.getTime();
-  const elapsedSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const elapsedSeconds = Math.floor(
+    (now.getTime() - lastClaim.getTime()) / 1000
+  );
+
+  if (elapsedSeconds <= 0) return 0;
 
   const MAX_SECONDS = 24 * 3600;
-  const capped = Math.min(elapsedSeconds, MAX_SECONDS);
-
   const DAILY_MAX = 4.8;
-  const rewardAmount = (capped / MAX_SECONDS) * DAILY_MAX;
-  const normalizedReward = Number(rewardAmount);
 
-  const update = await supabase
+  const cappedSeconds = Math.min(elapsedSeconds, MAX_SECONDS);
+  const reward = (cappedSeconds / MAX_SECONDS) * DAILY_MAX;
+
+  const { data: updated, error: updErr } = await supabase
     .from("mining_data")
     .update({
-      balance: (mining.balance ?? 0) + normalizedReward,
-      last_claim: now.toISOString(),
-      last_start: null,
-      mining_active: false,
+      balance: data.balance + reward,
+      last_claim: now.toISOString(), // ✅ checkpoint only
     })
     .eq("user_id", uid)
-    .eq("last_start", mining.last_start);
+    .eq("last_claim", data.last_claim) // 🔒 race lock
+    .select();
 
-  if (update.error) return 0;
+  if (updErr || !updated || updated.length === 0) return 0;
 
-  const rows = update.data as any[] | null;
-
-  if (!rows || rows.length === 0) return 0;
-
-  return normalizedReward;
+  return reward;
 }
 
 /* -------------------------------------------------------------

@@ -9,6 +9,10 @@ import {
   getUserData,
 } from "../services/user";
 
+/* ------------------------------------------------------------
+   RAW DB TYPES
+------------------------------------------------------------ */
+
 type RawProfileRow = {
   user_id: string;
   username: string;
@@ -46,11 +50,15 @@ type RawWatchRow = {
   total_earned: number;
 };
 
+/* ------------------------------------------------------------
+   FRONTEND TYPES
+------------------------------------------------------------ */
+
 export type MiningData = {
   miningActive: boolean;
-  lastStart: { toMillis: () => number } | null;
+  lastStart: string | null;
   lastClaim: string | null;
-  balance: number;
+  balance: number; // authoritative server balance
 };
 
 export type UserProfile = {
@@ -62,14 +70,9 @@ export type UserProfile = {
   createdAt: string;
 };
 
-function toTimestampLike(iso: string | null) {
-  if (!iso) return null;
-  return {
-    toMillis: () => new Date(iso).getTime(),
-  };
-}
-
-/* -------------------- Normalizers -------------------- */
+/* ------------------------------------------------------------
+   NORMALIZERS
+------------------------------------------------------------ */
 
 function normalizeProfile(p: RawProfileRow | null): UserProfile | null {
   if (!p) return null;
@@ -87,8 +90,8 @@ function normalizeMining(m: RawMiningRow | null): MiningData | null {
   if (!m) return null;
   return {
     miningActive: !!m.mining_active,
-    lastStart: toTimestampLike(m.last_start),
-    lastClaim: m.last_claim ?? null,
+    lastStart: m.last_start,
+    lastClaim: m.last_claim,
     balance: Number(m.balance ?? 0),
   };
 }
@@ -99,53 +102,57 @@ function normalizeBoost(b: RawBoostRow | null) {
     user_id: b.user_id,
     used_today: b.used_today,
     last_reset: b.last_reset,
-
     balance: b.balance,
   };
 }
 
 /* ------------------------------------------------------------
-   Compute display balance (unchanged)
+   LIVE BALANCE (SAFE)
 ------------------------------------------------------------ */
+
 function computeDisplayBalanceFromMining(mining: MiningData | null) {
-  const baseBalance = mining?.balance ?? 0;
-  const lastStartObj = mining?.lastStart ?? null;
-  const miningActive = mining?.miningActive ?? false;
+  if (!mining) return 0;
 
-  if (!miningActive || !lastStartObj) return baseBalance;
+  const base = mining.balance;
 
-  const nowMs = Date.now();
-  const lastStartMs = lastStartObj.toMillis();
-  const elapsedMs = Math.max(0, nowMs - lastStartMs);
-  const elapsedSeconds = Math.floor(elapsedMs / 1000);
-  const cappedSeconds = Math.min(elapsedSeconds, 24 * 3600);
+  if (!mining.miningActive || !mining.lastStart) return base;
 
-  const perSecond = 4.8 / (24 * 3600);
-  const sessionGain = cappedSeconds * perSecond;
+  const now = Date.now();
+  const startMs = new Date(mining.lastStart).getTime();
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((now - startMs) / 1000)
+  );
 
-  return Math.min(baseBalance + sessionGain, baseBalance + 4.8);
+  const MAX_SECONDS = 24 * 3600;
+  const DAILY_MAX = 4.8;
+
+  const capped = Math.min(elapsedSeconds, MAX_SECONDS);
+  const sessionGain = (capped / MAX_SECONDS) * DAILY_MAX;
+
+  return base + sessionGain;
 }
 
 /* ------------------------------------------------------------
-   Hook
+   HOOK
 ------------------------------------------------------------ */
+
 export function useMining() {
   const [miningData, setMiningData] = useState<MiningData | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
   const [dailyClaim, setDailyClaim] = useState<RawDailyRow | null>(null);
   const [boost, setBoost] = useState<ReturnType<typeof normalizeBoost> | null>(
     null
   );
   const [watchEarn, setWatchEarn] = useState<RawWatchRow | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const tickRef = useRef<number | null>(null);
   const channelsRef = useRef<any[]>([]);
 
   /* ------------------------------------------------------------
-     Initial load + realtime
+     INITIAL LOAD + REALTIME
   ------------------------------------------------------------ */
+
   useEffect(() => {
     let mounted = true;
 
@@ -157,7 +164,7 @@ export function useMining() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        if (mounted) setIsLoading(false);
+        setIsLoading(false);
         return;
       }
 
@@ -172,86 +179,59 @@ export function useMining() {
         setDailyClaim(combined?.dailyClaim ?? null);
         setBoost(normalizeBoost(combined?.boost ?? null));
         setWatchEarn(combined?.watchEarn ?? null);
-      } catch (err) {
-        console.error("useMining initial fetch error", err);
       } finally {
         if (mounted) setIsLoading(false);
       }
 
-      /* ------------------------- Realtime ------------------------- */
-      const tables = [
-        {
-          table: "user_profiles",
-          setter: (p: RawProfileRow | null) =>
-            setUserProfile(normalizeProfile(p)),
-        },
-        {
-          table: "mining_data",
-          setter: (r: RawMiningRow | null) => setMiningData(normalizeMining(r)),
-        },
-        {
-          table: "daily_claim_data",
-          setter: (r: RawDailyRow | null) => setDailyClaim(r),
-        },
-        {
-          table: "boost_data",
-          setter: (r: RawBoostRow | null) => setBoost(normalizeBoost(r)),
-        },
-        {
-          table: "watch_earn_data",
-          setter: (r: RawWatchRow | null) => setWatchEarn(r),
-        },
-        {
-          table: "referral_data",
-          setter: (_: any) => {},
-        },
-      ];
+      /* ------------------ REALTIME (SAFE MERGE) ------------------ */
 
-      const createdChannels: any[] = [];
+      const channel = supabase
+        .channel(`mining:uid:${uid}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "mining_data",
+            filter: `user_id=eq.${uid}`,
+          },
+          (payload) => {
+            const incoming = normalizeMining(payload.new as RawMiningRow);
 
-      for (const t of tables) {
-        const channel = supabase
-          .channel(`public:${t.table}:uid:${uid}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: t.table,
-              filter: `user_id=eq.${uid}`,
-            },
-            (payload) => {
-              const record = (payload.new ?? null) as any; // ✅ FIXED
-              t.setter(record);
-            }
-          )
-          .subscribe();
+            if (!incoming) return;
 
-        createdChannels.push(channel);
-      }
+            setMiningData((prev) => {
+              if (!prev) return incoming;
 
-      channelsRef.current = createdChannels;
+              return {
+                miningActive: incoming.miningActive,
+                lastStart: incoming.lastStart ?? prev.lastStart,
+                lastClaim: incoming.lastClaim ?? prev.lastClaim,
+                balance: Math.max(prev.balance, incoming.balance), // 🔒 never rewind
+              };
+            });
+          }
+        )
+        .subscribe();
+
+      channelsRef.current = [channel];
     })();
 
     return () => {
       mounted = false;
       channelsRef.current.forEach((ch) => {
         try {
-          ch.unsubscribe?.();
-        } catch (err) {
-          try {
-            supabase.removeChannel?.(ch);
-          } catch {}
-        }
+          supabase.removeChannel(ch);
+        } catch {}
       });
       channelsRef.current = [];
-      if (tickRef.current) cancelAnimationFrame(tickRef.current);
     };
   }, []);
 
   /* ------------------------------------------------------------
      ACTIONS
   ------------------------------------------------------------ */
+
   const start = useCallback(async () => {
     const {
       data: { user },
@@ -277,19 +257,13 @@ export function useMining() {
   }, []);
 
   /* ------------------------------------------------------------
-     Live balance
+     PUBLIC API
   ------------------------------------------------------------ */
-  const computeDisplayBalance = useCallback((snapshot: MiningData | null) => {
-    return computeDisplayBalanceFromMining(snapshot);
-  }, []);
 
   const getLiveBalance = useCallback(() => {
-    return computeDisplayBalance(miningData);
-  }, [computeDisplayBalance, miningData]);
+    return computeDisplayBalanceFromMining(miningData);
+  }, [miningData]);
 
-  /* ------------------------------------------------------------
-     Return API
-  ------------------------------------------------------------ */
   return {
     miningData,
     userProfile,

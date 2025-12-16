@@ -67,8 +67,9 @@ function RegisterScreen() {
   }
 
   if (password !== confirm) return triggerError("Passwords do not match");
-  if (password.length < 6)
+  if (password.length < 6) {
     return triggerError("Password must be at least 6 characters");
+  }
 
   setLoading(true);
   setErrorMsg("");
@@ -86,28 +87,36 @@ function RegisterScreen() {
 
     const user = data.user;
     if (!user) throw new Error("User was not created.");
+
     const uid = user.id;
 
-    // 2️⃣ Create a user_profiles row immediately
-    const { error: insertError } = await supabase.from("user_profiles").insert({
-      user_id: uid,
-      username: "", // Empty for now; user will fill it in profileSetup
-      referral_code: Math.random().toString(36).substring(2, 8).toUpperCase(), // Example referral code
-      created_at: new Date().toISOString(),
-    });
+    // 2️⃣ Create profile row
+    const { error: insertError } = await supabase
+      .from("user_profiles")
+      .insert({
+        user_id: uid,
+        username: "",
+        referral_code: Math.random()
+          .toString(36)
+          .substring(2, 8)
+          .toUpperCase(),
+        created_at: new Date().toISOString(),
+      });
 
     if (insertError) {
-      console.warn("Error creating user profile:", insertError);
-      // Non-fatal: user can still continue to profileSetup
+      console.warn("Profile insert error:", insertError);
     }
 
-    // 3️⃣ Redirect to profile setup immediately
+    // 🔴 3️⃣ SIGN OUT (CRITICAL)
+    await supabase.auth.signOut();
+
+    // ✅ 4️⃣ Go to onboarding
     router.replace("/(onboarding)/profileSetup");
   } catch (err: any) {
     triggerError(err?.message ?? "Registration failed");
+  } finally {
+    setLoading(false);
   }
-
-  setLoading(false);
 };
 
 

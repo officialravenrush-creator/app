@@ -1,19 +1,23 @@
 export interface UserProfile {
   user_id: string;
-  username: string; // NOT nullable
+  username: string;
   avatar_url: string | null;
   referral_code: string;
   referred_by: string | null;
   created_at: string;
+
+  // ✅ NEW
+  has_completed_onboarding: boolean;
 }
+
 
 export interface MiningData {
   user_id: string;
-  mining_active: boolean;
+   mining_active: boolean;
   last_start: string | null;
   last_claim: string | null;
-  balance: number;
-}
+  balance: number; // server balance (base)
+};
 
 export interface ReferralData {
   user_id: string;

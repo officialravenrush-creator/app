@@ -3,30 +3,53 @@ import { supabase } from "../supabase/client";
 import { Session, User } from "@supabase/supabase-js";
 
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
-    // 1️⃣ Get initial session
-    supabase.auth.getSession().then(({ data }) => {
+    const load = async () => {
+      const { data } = await supabase.auth.getSession();
       if (!mounted) return;
 
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      setLoading(false); // ✅ CRITICAL FIX
-    });
+      const user = data.session?.user ?? null;
+      setUser(user);
 
-    // 2️⃣ Listen for auth changes
-    const { data: listener } =
-      supabase.auth.onAuthStateChange((_event, session) => {
-        if (!mounted) return;
+      if (user) {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
 
-        setSession(session);
-        setUser(session?.user ?? null);
-      });
+        setProfile(profile);
+      }
+
+      setLoading(false);
+    };
+
+    load();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        const user = session?.user ?? null;
+        setUser(user);
+
+        if (user) {
+          const { data: profile } = await supabase
+            .from("user_profiles")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+          setProfile(profile);
+        } else {
+          setProfile(null);
+        }
+      }
+    );
 
     return () => {
       mounted = false;
@@ -34,5 +57,10 @@ export function useAuth() {
     };
   }, []);
 
-  return { session, user, loading };
+  return {
+    user,
+    profile,
+    loading,
+    onboarded: profile?.has_completed_onboarding,
+  };
 }
