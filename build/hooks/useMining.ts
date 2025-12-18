@@ -80,7 +80,10 @@ function normalizeProfile(p: RawProfileRow | null): UserProfile | null {
   return {
     user_id: p.user_id,
     username: p.username ?? "",
-    avatarUrl: p.avatar_url ?? null,
+    avatarUrl: p.avatar_url
+  ? `${p.avatar_url}?t=${Date.now()}`
+  : null,
+
     referralCode: p.referral_code ?? "",
     referredBy: p.referred_by ?? null,
     createdAt: p.created_at,
@@ -266,6 +269,8 @@ export function useMining() {
   const getLiveBalance = useCallback(() => {
     return computeDisplayBalanceFromMining(miningData);
   }, [miningData]);
+
+  
 
   return {
     miningData,

@@ -11,11 +11,14 @@ import {
   Image,
   RefreshControl,
 } from "react-native";
+
 import { MotiText, MotiView } from "moti";
 
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 import { useMining } from "../../hooks/useMining";
 import DailyClaim from "../../components/DailyClaim";
@@ -123,6 +126,9 @@ export default function Page() {
   const spinAnim = useRef<Animated.CompositeAnimation | null>(null);
   const [claimedBalance, setClaimedBalance] = useState<number | null>(null);
 
+  const insets = useSafeAreaInsets();
+
+  
 
   const [isStarting, setIsStarting] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
@@ -294,7 +300,14 @@ const handleRefresh = async () => {
   return (
     <View style={styles.container}>
       {/* FIXED HEADER */}
-      <LinearGradient colors={["#24164a", "#0b0614"]} style={styles.fixedHeader}>
+      <LinearGradient
+  colors={["#24164a", "#0b0614"]}
+  style={[
+    styles.fixedHeader,
+    { paddingTop: insets.top + 14 },
+  ]}
+>
+
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.push("/(tabs)/profile")}>
             <View style={styles.avatarCircle}>
@@ -323,7 +336,8 @@ const handleRefresh = async () => {
       </LinearGradient>
 
       {/* STATIC CONTENT */}
-      <View style={{ marginTop: HEADER_HEIGHT - 20 }}>
+      <View style={{ marginTop: HEADER_HEIGHT - 50 }}>
+
         <View style={styles.balanceWrap}>
           
           <Text style={styles.label}>Total Balance (Claimed)</Text>
@@ -450,20 +464,21 @@ const styles = StyleSheet.create({
   headerTitle: { color: "#fff", fontSize: 22, fontWeight: "900" },
   headerSub: { color: "#bfc7df", marginTop: 6 },
 
-  avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+ avatarCircle: {
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  backgroundColor: "rgba(139,92,246,0.25)", // stronger contrast
+  alignItems: "center",
+  justifyContent: "center",
+},
+
   avatar: { width: 44, height: 44, borderRadius: 22 },
 
-  balanceWrap: {
+ balanceWrap: {
   paddingHorizontal: 22,
-  paddingTop: 18,
-  paddingBottom: 12,
+  paddingTop: 20, // was 18
+  paddingBottom: 10,
 },
 
   label: { color: "#9FA8C7", marginBottom: 6 },
