@@ -109,9 +109,7 @@ export default function DailyClaim({
   /* -------------------------------------------------
      AUTO CLOSE IF LOGGED OUT
   -------------------------------------------------- */
-  useEffect(() => {
-    if (!uid && visible) onClose?.();
-  }, [uid, visible, onClose]);
+
 
   /* -------------------------------------------------
      INTERSTITIAL AD
