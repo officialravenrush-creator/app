@@ -392,14 +392,10 @@ const handleRefresh = async () => {
 </View>
 </View>
 
-      <MotiView
-  from={{ opacity: 0, translateY: 6 }}
-  animate={{ opacity: 1, translateY: 0 }}
-  transition={{ duration: 300 }}
-  style={styles.inlineAdWrap}
->
+      
+
   <AdBanner />
-</MotiView>
+
 
 
       {/* SCROLLABLE NEWS ONLY */}

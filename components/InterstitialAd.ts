@@ -1,62 +1,80 @@
 // components/InterstitialAd.ts
-let _adsModule: any | null = null;
+// components/InterstitialAd.ts
+import {
+  InterstitialAd,
+  AdEventType,
+  TestIds,
+} from "react-native-google-mobile-ads";
+import { Platform } from "react-native";
 
-// Lazy loader for google-mobile-ads
-async function loadAdsModule() {
-  if (_adsModule) return _adsModule;
-  _adsModule = await import("react-native-google-mobile-ads");
-  return _adsModule;
-}
+const IS_NATIVE =
+  Platform.OS === "android" || Platform.OS === "ios";
 
 export async function showInterstitial(): Promise<void> {
-  try {
-    const ads = await loadAdsModule();
-
-    const { InterstitialAd, AdEventType, TestIds } = ads;
-
-    const unitId = __DEV__
-      ? TestIds.INTERSTITIAL
-      : "ca-app-pub-4533962949749202/2761859275"; // ← YOUR REAL ID
-
-    const interstitial = InterstitialAd.createForAdRequest(unitId);
-
-    return new Promise<void>((resolve, reject) => {
-      const loaded = interstitial.addAdEventListener(
-        AdEventType.LOADED,
-        () => {
-          try {
-            interstitial.show();
-          } catch (e) {
-            reject(e);
-          }
-        }
-      );
-
-      const error = interstitial.addAdEventListener(
-        AdEventType.ERROR,
-        (err: any) => {
-          console.log("[Interstitial] Load error", err);
-          loaded();
-          error();
-          closed();
-          reject(err);
-        }
-      );
-
-      const closed = interstitial.addAdEventListener(
-        AdEventType.CLOSED,
-        () => {
-          loaded();
-          error();
-          closed();
-          resolve();
-        }
-      );
-
-      interstitial.load();
-    });
-  } catch (err) {
-    console.warn("Failed to load ads module:", err);
-    throw err;
+  if (!IS_NATIVE) {
+    console.log("[Ad] Not native platform");
+    return;
   }
+
+  const unitId = __DEV__
+    ? TestIds.INTERSTITIAL
+    : "ca-app-pub-4533962949749202/2761859275";
+
+  const interstitial = InterstitialAd.createForAdRequest(unitId, {
+    requestNonPersonalizedAdsOnly: true,
+  });
+
+  return new Promise<void>((resolve) => {
+    let resolved = false;
+
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      console.log("[Ad] Timeout – skipping ad");
+      resolve(); // ⬅️ IMPORTANT: do NOT reject
+    }, 8000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      loaded();
+      closed();
+      error();
+    };
+
+    const loaded = interstitial.addAdEventListener(
+      AdEventType.LOADED,
+      () => {
+        console.log("[Ad] Interstitial loaded");
+        interstitial.show().catch(() => {
+          cleanup();
+          resolve();
+        });
+      }
+    );
+
+    const closed = interstitial.addAdEventListener(
+      AdEventType.CLOSED,
+      () => {
+        console.log("[Ad] Interstitial closed");
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        resolve();
+      }
+    );
+
+    const error = interstitial.addAdEventListener(
+      AdEventType.ERROR,
+      (err) => {
+        console.log("[Ad] Interstitial error:", err);
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        resolve(); // ⬅️ NEVER reject — allow reward flow
+      }
+    );
+
+    interstitial.load();
+  });
 }
