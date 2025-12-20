@@ -8,7 +8,6 @@
     "scheme": "vadmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "android": {
       "package": "com.vadminingspace.vadmobile",
       "edgeToEdgeEnabled": true,
@@ -24,12 +23,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       }
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -54,19 +51,19 @@
         }
       ]
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-
     "extra": {
       "router": {},
       "eas": {
         "projectId": "8e9af1cf-e5b7-4272-9aaa-fc3b86afff37"
       }
     },
-
-    "owner": "skima112"
+    "owner": "skima112",
+    "ios": {
+      "bundleIdentifier": "com.vadminingspace.vadmobile"
+    }
   }
 }

@@ -1,12 +1,30 @@
 // app/_layout.tsx
 import { Slot, Redirect, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, Platform } from "react-native";
+import { useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
+
+// ✅ ADD THIS
+import mobileAds from "react-native-google-mobile-ads";
 
 export default function RootLayout() {
   const { user, loading, onboarded } = useAuth();
   const segments = useSegments();
+
+  // ✅ INITIALIZE ADMOB ONCE (ANDROID ONLY)
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    mobileAds()
+      .initialize()
+      .then(status => {
+        console.log("✅ AdMob initialized:", status);
+      })
+      .catch(err => {
+        console.log("❌ AdMob init failed:", err);
+      });
+  }, []);
 
   if (loading) {
     return (
@@ -36,7 +54,11 @@ export default function RootLayout() {
   }
 
   // 🚫 Logged-in & onboarded → block auth + onboarding
-  if (user && onboarded && (group === "(auth)" || group === "(onboarding)")) {
+  if (
+    user &&
+    onboarded &&
+    (group === "(auth)" || group === "(onboarding)")
+  ) {
     return <Redirect href="/(tabs)" />;
   }
 
