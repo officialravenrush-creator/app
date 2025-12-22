@@ -55,7 +55,8 @@ export default function Boost({
   visible,
   onClose,
 }: BoostProps) {
-  const { boost } = useMining();
+  const { boost, applyBoostClaim } = useMining();
+
 
   const boostSafe = useMemo(() => {
     if (!boost) return null;
@@ -156,11 +157,16 @@ export default function Boost({
       // ✅ THEN APPLY BOOST
       const reward = await claimBoostReward(user.id);
 
-      if (reward > 0) {
-  setMessage(`+${reward.toFixed(1)} VAD added!`);
-} else {
+    const res = await claimBoostReward(user.id);
+
+if (!res || res.reward <= 0 || !res.boost) {
   setMessage("Boost failed. Please try again.");
+  return;
 }
+
+applyBoostClaim(res);
+setMessage(`+${res.reward.toFixed(1)} VAD added!`);
+
 
     } catch (err) {
       console.log("Boost ad failed:", err);

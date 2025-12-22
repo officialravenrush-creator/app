@@ -160,6 +160,20 @@ export function useMining() {
   []
 );
   
+const applyBoostClaim = useCallback(
+  (data: { reward: number; boost: RawBoostRow }) => {
+    setBoost(normalizeBoost(data.boost));
+
+    setMiningData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        balance: prev.balance + data.reward,
+      };
+    });
+  },
+  []
+);
 
   /* ------------------------------------------------------------
      INITIAL LOAD + REALTIME
@@ -250,7 +264,7 @@ export function useMining() {
           {
             event: "*",
             schema: "public",
-            table: "boost",
+            table: "boost_data",
             filter: `user_id=eq.${uid}`,
           },
           (payload) => {
@@ -310,6 +324,7 @@ return {
   stop,
   claim,
   getLiveBalance,
-  applyDailyClaim, // ✅ ADD THIS
+  applyDailyClaim,
+  applyBoostClaim, // ✅ ADD
 };
 }

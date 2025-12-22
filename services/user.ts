@@ -304,7 +304,16 @@ export async function claimBoostReward(uid: string) {
 
   if (updateMining.error || updateBoost.error) return 0;
 
-  return REWARD;
+  return {
+  reward: REWARD,
+  boost: {
+    user_id: uid,
+    used_today: boost.used_today + 1,
+    last_reset: now.toISOString(),
+    balance: (boost.balance ?? 0) + REWARD,
+  },
+};
+
 }
 
 /* -------------------------------------------------------------
