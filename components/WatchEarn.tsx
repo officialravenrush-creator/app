@@ -156,31 +156,30 @@ export default function WatchEarn({
   setCompleted(false);
   setMessage("");
 
-  try {
-    // 🔥 SHOW REWARDED AD (must be fully watched)
-    await showRewardedAd();
+ try {
+  // 🔥 SHOW REWARDED AD (must be fully watched)
+  const watched = await showRewardedAd();
 
-    // ✅ THEN reward user
-const res = await claimWatchRewardSupabase(uid);
+  // ❌ Ad not completed or failed to show
+  if (!watched) {
+    setCompleted(false);
+    setMessage("You must watch the ad fully to earn the reward.");
+    return;
+  }
 
-if (!res || res.reward <= 0) {
-  setCompleted(false);
-  setMessage("Reward not granted. Please try again later.");
-  return;
-}
+  // ✅ ONLY THEN call backend
+  const res = await claimWatchRewardSupabase(uid);
 
-// 🔥 apply backend truth immediately
-setStats(res.stats);
+  if (!res || res.reward <= 0) {
+    setCompleted(false);
+    setMessage("Reward not granted. Please try again later.");
+    return;
+  }
 
-setCompleted(true);
-setMessage(`+${res.reward.toFixed(2)} VAD credited!`);
-
-
-// 🔥 apply backend truth immediately
-setStats(res.stats);
-
-setCompleted(true);
-setMessage(`+${res.reward.toFixed(2)} VAD credited!`);
+  // 🔥 apply backend truth immediately
+  setStats(res.stats);
+  setCompleted(true);
+  setMessage(`+${res.reward.toFixed(2)} VAD credited!`);
 
 
   } catch (err) {

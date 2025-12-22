@@ -22,43 +22,53 @@ export async function showRewardedAd(): Promise<boolean> {
     let earned = false;
     let finished = false;
 
+    const unsubscribers: (() => void)[] = [];
+
     const cleanup = () => {
-      loaded();
-      reward();
-      closed();
-      error();
+      unsubscribers.forEach((u) => u());
     };
 
-    const loaded = rewarded.addAdEventListener(
-      RewardedAdEventType.LOADED,
-      () => rewarded.show()
+    unsubscribers.push(
+      rewarded.addAdEventListener(
+        RewardedAdEventType.LOADED,
+        () => {
+          rewarded.show();
+        }
+      )
     );
 
-    const reward = rewarded.addAdEventListener(
-      RewardedAdEventType.EARNED_REWARD,
-      () => {
-        earned = true;
-      }
+    unsubscribers.push(
+      rewarded.addAdEventListener(
+        RewardedAdEventType.EARNED_REWARD,
+        () => {
+          earned = true;
+        }
+      )
     );
 
-    const closed = rewarded.addAdEventListener(
-      AdEventType.CLOSED,
-      () => {
-        if (finished) return;
-        finished = true;
-        cleanup();
-        resolve(earned); // ✅ TRUE only if reward earned
-      }
+    unsubscribers.push(
+      rewarded.addAdEventListener(
+        AdEventType.CLOSED,
+        () => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          resolve(earned); // ✅ TRUE only if fully watched
+        }
+      )
     );
 
-    const error = rewarded.addAdEventListener(
-      AdEventType.ERROR,
-      () => {
-        if (finished) return;
-        finished = true;
-        cleanup();
-        resolve(false);
-      }
+    unsubscribers.push(
+      rewarded.addAdEventListener(
+        AdEventType.ERROR,
+        (err) => {
+          console.log("Rewarded ad error:", err);
+          if (finished) return;
+          finished = true;
+          cleanup();
+          resolve(false);
+        }
+      )
     );
 
     rewarded.load();
