@@ -55,15 +55,15 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
+    "owner": "skima1122",
+    "ios": {
+      "bundleIdentifier": "com.vadminingspace.vadmobile"
+    },
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "8e9af1cf-e5b7-4272-9aaa-fc3b86afff37"
+        "projectId": "a96dba87-96ff-4f7e-95e3-ba8c87a8554a"
       }
-    },
-    "owner": "skima112",
-    "ios": {
-      "bundleIdentifier": "com.vadminingspace.vadmobile"
     }
   }
 }
