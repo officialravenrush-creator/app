@@ -13,7 +13,6 @@ import {
 
 import { MotiText } from "moti";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -29,8 +28,20 @@ import AdBanner from "../../components/AdBanner";
 =============================================================== */
 const DAY_SECONDS = 24 * 3600;
 const DAILY_MAX = 4.8;
-const HEADER_HEIGHT = 150;
-const BANNER_HEIGHT = 60;
+
+const HEADER_MAX = 140;
+const HEADER_MIN = 84;
+
+
+
+/* ============================================================
+   HELPERS
+=============================================================== */
+const getTier = (balance: number) => {
+  if (balance >= 50) return { label: "Gold", color: "#FACC15" };
+  if (balance >= 15) return { label: "Silver", color: "#CBD5E1" };
+  return { label: "Bronze", color: "#F97316" };
+};
 
 /* ============================================================
    ANIMATED BALANCE
@@ -39,9 +50,11 @@ function AnimatedBalance({ animatedValue }: { animatedValue: Animated.Value }) {
   const [val, setVal] = useState(0);
 
   useEffect(() => {
-    const id = animatedValue.addListener(({ value }) => setVal(Number(value)));
+    const id = animatedValue.addListener(({ value }) =>
+      setVal(Number(value))
+    );
     return () => animatedValue.removeListener(id);
-  }, [animatedValue]);
+  }, []);
 
   return (
     <MotiText
@@ -56,15 +69,22 @@ function AnimatedBalance({ animatedValue }: { animatedValue: Animated.Value }) {
 }
 
 /* ============================================================
+   MINI ACTION
+=============================================================== */
+const MiniAction = ({ icon, label, onPress }: any) => (
+  <Pressable style={styles.miniBtn} onPress={onPress}>
+    <MaterialIcons name={icon} size={22} color="#8B5CF6" />
+    <Text style={styles.miniLabel}>{label}</Text>
+  </Pressable>
+);
+
+/* ============================================================
    MAIN PAGE
 =============================================================== */
 export default function Page() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-
   const {
     miningData,
-    userProfile,
     isLoading,
     start,
     stop,
@@ -78,13 +98,10 @@ export default function Page() {
   const miningDataRef = useRef(miningData);
 
   const spinValue = useRef(new Animated.Value(0)).current;
-  const spinAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const shimmerX = useRef(new Animated.Value(0)).current;
 
   const [claimedBalance, setClaimedBalance] = useState<number | null>(null);
-
-  const [isStarting, setIsStarting] = useState(false);
-  const [isClaiming, setIsClaiming] = useState(false);
-
   const [sessionElapsed, setSessionElapsed] = useState(0);
   const [sessionBalance, setSessionBalance] = useState(0);
   const [timeLeft, setTimeLeft] = useState(DAY_SECONDS);
@@ -100,11 +117,11 @@ export default function Page() {
   );
 
   const canClaim = miningActive && sessionElapsed >= DAY_SECONDS;
+  const tier = getTier(miningData?.balance ?? 0);
 
   /* ============================================================
      EFFECTS
 =============================================================== */
-
   useEffect(() => {
     miningDataRef.current = miningData;
   }, [miningData]);
@@ -123,6 +140,16 @@ export default function Page() {
       useNativeDriver: false,
     }).start();
   }, [claimedBalance]);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(shimmerX, {
+        toValue: 1,
+        duration: 4200,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -148,44 +175,14 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (!spinAnim.current) {
-      spinAnim.current = Animated.loop(
-        Animated.timing(spinValue, {
-          toValue: 1,
-          duration: 3200,
-          useNativeDriver: true,
-        })
-      );
-    }
-    miningActive ? spinAnim.current.start() : spinAnim.current.stop();
-  }, [miningActive]);
-
-  /* ============================================================
-     ACTIONS
-=============================================================== */
-  const handleStartStop = async () => {
-    try {
-      setIsStarting(true);
-      miningActive ? await stop() : await start();
-    } catch {
-      Alert.alert("Error", "Unable to update mining state.");
-    } finally {
-      setIsStarting(false);
-    }
-  };
-
-  const handleClaim = async () => {
-    if (!canClaim) return;
-    try {
-      setIsClaiming(true);
-      const reward = await claim();
-      Alert.alert("Mining Reward Claimed", `${reward.toFixed(4)} VAD`);
-    } catch {
-      Alert.alert("Error", "Claim failed.");
-    } finally {
-      setIsClaiming(false);
-    }
-  };
+    Animated.loop(
+      Animated.timing(spinValue, {
+        toValue: 1,
+        duration: 3200,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
 
   if (isLoading) {
     return (
@@ -194,6 +191,12 @@ export default function Page() {
       </View>
     );
   }
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, HEADER_MAX - HEADER_MIN],
+    outputRange: [HEADER_MAX, HEADER_MIN],
+    extrapolate: "clamp",
+  });
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
@@ -206,58 +209,106 @@ export default function Page() {
   return (
     <View style={styles.container}>
       {/* HEADER */}
-      <LinearGradient
-        colors={["#24164a", "#0b0614"]}
-        style={[styles.fixedHeader, { paddingTop: insets.top + 14 }]}
+      <Animated.View
+        style={[
+          styles.fixedHeader,
+          { height: headerHeight, paddingTop: insets.top + 12 },
+        ]}
       >
+        <LinearGradient
+          colors={["#24164a", "#0b0614"]}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* SHIMMER */}
+        <Animated.View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            transform: [
+              {
+                translateX: shimmerX.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-200, 300],
+                }),
+              },
+            ],
+          }}
+        >
+          <LinearGradient
+            colors={["transparent", "rgba(255,255,255,0.08)", "transparent"]}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.push("/(tabs)/profile")}>
-            <View style={styles.avatarCircle}>
-              {userProfile?.avatarUrl ? (
-                <Image source={{ uri: userProfile.avatarUrl }} style={styles.avatar} />
-              ) : (
-                <Ionicons name="person" size={22} color="#fff" />
-              )}
-            </View>
-          </Pressable>
+          <Image
+            source={require("../../assets/images/icon.png")}
+            style={styles.logo}
+          />
 
-          <Text style={styles.headerTitle}>VAD Mining</Text>
-          <View style={{ width: 22 }} />
+          <View>
+  <Text style={styles.headerTitle}>VAD DEPOT</Text>
+
+  <Text style={styles.headerSub}>
+  
+  </Text>
+
+  <Text style={styles.headerTagline}>
+    CONTRIBUTE • SECURE • EARN
+  </Text>
+</View>
+
+
+          <View style={[styles.tierBadge, { borderColor: tier.color }]}>
+            <Text style={[styles.tierText, { color: tier.color }]}>
+              {tier.label}
+            </Text>
+          </View>
         </View>
-
-        <Text style={styles.headerSub}>Max {DAILY_MAX} VAD per 24 hours</Text>
-      </LinearGradient>
+      </Animated.View>
 
       {/* CONTENT */}
-      <View style={{ marginTop: HEADER_HEIGHT }}>
+      <Animated.ScrollView
+        contentContainerStyle={{ paddingTop: HEADER_MAX }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      >
+        {/* BALANCE */}
         <View style={styles.balanceWrap}>
           <Text style={styles.label}>Total Balance</Text>
           <AnimatedBalance animatedValue={animatedBalance} />
         </View>
 
+        {/* PRIMARY ACTIONS */}
         <View style={styles.primaryActions}>
-          <Pressable style={styles.primaryBtn} onPress={handleStartStop} disabled={isStarting}>
+          <Pressable style={styles.primaryBtn} onPress={() => miningActive ? stop() : start()}>
             <Ionicons name={miningActive ? "pause" : "play"} size={40} color="#fff" />
             <Text style={styles.primaryText}>{miningActive ? "Stop" : "Mine"}</Text>
           </Pressable>
 
           <Pressable
             style={[styles.primaryBtn, !canClaim && { opacity: 0.45 }]}
-            onPress={handleClaim}
-            disabled={!canClaim || isClaiming}
+            onPress={claim}
+            disabled={!canClaim}
           >
             <Ionicons name="gift" size={40} color="#fff" />
             <Text style={styles.primaryText}>Claim</Text>
           </Pressable>
         </View>
 
+        {/* SESSION CARD */}
         <View style={styles.sessionCard}>
-          <Animated.View style={{ transform: [{ rotate: spin }], opacity: miningActive ? 1 : 0.35 }}>
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
             <Ionicons name="hardware-chip" size={36} color="#8B5CF6" />
           </Animated.View>
 
           <Text style={styles.sessionValue}>
-            {miningActive ? `${sessionBalance.toFixed(4)} VAD` : "Start mining to begin"}
+            {miningActive
+              ? `${sessionBalance.toFixed(4)} VAD`
+              : "Start mining to begin"}
           </Text>
 
           <View style={styles.progressBg}>
@@ -267,17 +318,20 @@ export default function Page() {
           <Text style={styles.progressMeta}>
             {canClaim
               ? "✅ Claim available"
-              : `⏳ ${Math.floor(timeLeft / 3600)}h ${Math.floor((timeLeft % 3600) / 60)}m remaining`}
+              : `⏳ ${Math.floor(timeLeft / 3600)}h ${Math.floor(
+                  (timeLeft % 3600) / 60
+                )}m remaining`}
           </Text>
         </View>
 
+        {/* FLOATING ACTIONS */}
         <View style={styles.floatingRow}>
           <MiniAction icon="rocket" label="Boost" onPress={() => setBoostOpen(true)} />
           <MiniAction icon="play-circle" label="Watch" onPress={() => setWatchOpen(true)} />
           <MiniAction icon="calendar" label="Daily" onPress={() => setDailyOpen(true)} />
         </View>
 
-        {/* NEWS PREVIEW */}
+        {/* NEWS */}
         <Pressable style={styles.newsPreview} onPress={() => setNewsOpen(true)}>
           <View style={styles.newsRow}>
             <Ionicons name="newspaper" size={22} color="#8B5CF6" />
@@ -287,13 +341,12 @@ export default function Page() {
             Latest announcements, mining updates, rewards & ecosystem news.
           </Text>
         </Pressable>
-      </View>
 
-      {/* AD BANNER */}
-<View style={styles.newsAdWrap}>
-  <AdBanner />
-</View>
-
+        {/* AD */}
+        <View style={styles.newsAdWrap}>
+          <AdBanner />
+        </View>
+      </Animated.ScrollView>
 
       {/* MODALS */}
       {dailyOpen && <DailyClaim visible onClose={() => setDailyOpen(false)} />}
@@ -305,16 +358,6 @@ export default function Page() {
 }
 
 /* ============================================================
-   MINI ACTION
-=============================================================== */
-const MiniAction = ({ icon, label, onPress }: any) => (
-  <Pressable style={styles.miniBtn} onPress={onPress}>
-    <MaterialIcons name={icon} size={22} color="#8B5CF6" />
-    <Text style={styles.miniLabel}>{label}</Text>
-  </Pressable>
-);
-
-/* ============================================================
    STYLES
 =============================================================== */
 const styles = StyleSheet.create({
@@ -323,31 +366,33 @@ const styles = StyleSheet.create({
 
   fixedHeader: {
     position: "absolute",
-    top: 0,
     left: 0,
     right: 0,
-    height: HEADER_HEIGHT,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
     zIndex: 10,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
+    overflow: "hidden",
+    paddingHorizontal: 18,
   },
 
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  headerTitle: { color: "#fff", fontSize: 22, fontWeight: "900" },
-  headerSub: { color: "#bfc7df", marginTop: 6 },
-
-  avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(139,92,246,0.25)",
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    justifyContent: "center",
   },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
 
-  
+  logo: { width: 44, height: 44, borderRadius: 12 },
+
+  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  headerSub: { color: "#bfc7df", fontSize: 12 },
+
+  tierBadge: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  tierText: { fontSize: 11, fontWeight: "900" },
 
   balanceWrap: { paddingHorizontal: 22, paddingTop: 20 },
   label: { color: "#9FA8C7", marginBottom: 6 },
@@ -377,7 +422,6 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: "center",
   },
-
   sessionValue: { fontSize: 28, color: "#fff", fontWeight: "900", marginVertical: 10 },
 
   progressBg: {
@@ -405,27 +449,36 @@ const styles = StyleSheet.create({
   },
   miniLabel: { color: "#9FA8C7", fontSize: 11, marginTop: 4 },
 
- newsPreview: {
-  marginHorizontal: 22,
-  marginTop: 4,        // 👈 pull it upward
-  paddingVertical: 10, // 👈 tighter height
-  paddingHorizontal: 14,
-  borderRadius: 16,    // slightly tighter look
-  backgroundColor: "rgba(255,255,255,0.04)",
-},
-
+  newsPreview: {
+    marginHorizontal: 22,
+    marginTop: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
   newsRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
   newsPreviewTitle: { color: "#fff", fontWeight: "900", marginLeft: 8 },
   newsPreviewText: { color: "#9FA8C7", fontSize: 12, lineHeight: 16 },
 
- newsAdWrap: {
-  marginHorizontal: 22,
-  marginTop: 12,
-  height: 60,              // 👈 REQUIRED
-  borderRadius: 18,
-  overflow: "hidden",
-  backgroundColor: "rgba(255,255,255,0.05)", // optional (debug/UX)
+  newsAdWrap: {
+    marginHorizontal: 22,
+    marginTop: 12,
+    height: 60,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+
+  headerTagline: {
+  marginTop: 8,          // 👈 pushes it DOWN a bit
+  color: "#8B5CF6",      // 👈 strong purple (matches your primary)
+  fontSize: 13,          // slightly larger
+  fontWeight: "900",     // MAX bold
+  letterSpacing: 1.2,    // punchy, premium
+  textTransform: "uppercase",
 },
 
 
 });
+
