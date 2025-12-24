@@ -246,17 +246,22 @@ export default function Page() {
             style={styles.logo}
           />
 
-          <View>
+   <View>
   <Text style={styles.headerTitle}>VAD DEPOT</Text>
-
-  <Text style={styles.headerSub}>
-  
-  </Text>
 
   <Text style={styles.headerTagline}>
     CONTRIBUTE • SECURE • EARN
   </Text>
+
+  <Text style={styles.headerEarning}>
+    Earn up to <Text style={styles.headerEarningStrong}>4.8 VAD</Text> / 24hrs
+  </Text>
+
+  <Text style={styles.headerIntro}>
+    Proof-of-Stake Network
+  </Text>
 </View>
+
 
 
           <View style={[styles.tierBadge, { borderColor: tier.color }]}>
@@ -470,14 +475,35 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.05)",
   },
 
-  headerTagline: {
-  marginTop: 8,          // 👈 pushes it DOWN a bit
-  color: "#8B5CF6",      // 👈 strong purple (matches your primary)
-  fontSize: 13,          // slightly larger
-  fontWeight: "900",     // MAX bold
-  letterSpacing: 1.2,    // punchy, premium
+ headerTagline: {
+  marginTop: 6,
+  color: "#8B5CF6",
+  fontSize: 13,
+  fontWeight: "900",
+  letterSpacing: 1.2,
   textTransform: "uppercase",
 },
+
+headerEarning: {
+  marginTop: 4,
+  color: "#C4B5FD",
+  fontSize: 12,
+  fontWeight: "700",
+},
+
+headerEarningStrong: {
+  color: "#8B5CF6",
+  fontWeight: "900",
+},
+
+headerIntro: {
+  marginTop: 2,
+  color: "#9FA8C7",
+  fontSize: 11,
+  fontWeight: "600",
+  letterSpacing: 0.4,
+},
+
 
 
 });
