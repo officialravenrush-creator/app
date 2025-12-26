@@ -111,10 +111,10 @@ export default function DailyClaim({
   }, [dailyClaim?.last_claim]);
 
   
-  /* -------------------------------------------------
-     CLAIM HANDLER
-  -------------------------------------------------- */
-  const handleClaim = async () => {
+ /* -------------------------------------------------
+   CLAIM HANDLER (FIXED & TYPE-SAFE)
+-------------------------------------------------- */
+const handleClaim = async () => {
   if (loadingRef.current || cooldownMs > 0) return;
 
   setMessage("");
@@ -129,26 +129,28 @@ export default function DailyClaim({
   }
 
   try {
-    // 🔥 SHOW AD FIRST (await)
+    // 🔥 SHOW AD FIRST
     await showInterstitial();
 
-    // ✅ THEN reward
+    // 🎁 CLAIM
     const res = await claimDailyReward(uid);
 
-    const reward =
-      typeof res === "object"
-        ? res?.reward ?? 0
-        : Number(res || 0);
+    // ❌ FAILURE PATH (NARROW UNION)
+    if (!res.success) {
+      if (res.reason === "cooldown") {
+        setMessage("You already claimed today ⏳");
+      } else {
+        setMessage("Claim failed. Please try again later.");
+      }
+      return;
+    }
 
-if (!res || res.reward <= 0 || !res.dailyClaim) {
-  setMessage("Claim failed. Please try again later.");
-  return;
-}
+    // ✅ SUCCESS PATH (TYPE SAFE)
+    const { reward, dailyClaim } = res;
 
-applyDailyClaim(res);
-setMessage(`+${res.reward.toFixed(1)} VAD added to your balance!`);
+    applyDailyClaim({ reward, dailyClaim });
 
-
+    setMessage(`+${reward.toFixed(1)} VAD added to your balance!`);
   } catch (err) {
     console.log("Ad or claim failed:", err);
     setMessage("Ad not available. Try again later.");
@@ -158,16 +160,19 @@ setMessage(`+${res.reward.toFixed(1)} VAD added to your balance!`);
   }
 };
 
+/* -------------------------------------------------
+   DERIVED UI STATE (MISSING)
+-------------------------------------------------- */
+const streak = dailyClaim?.streak ?? 0;
 
-  const streak = dailyClaim?.streak ?? 0;
+const progressLabel = useMemo(
+  () =>
+    cooldownMs > 0
+      ? fmtTimeLeft(cooldownMs)
+      : "Available now",
+  [cooldownMs]
+);
 
-  const progressLabel = useMemo(
-    () =>
-      cooldownMs > 0
-        ? fmtTimeLeft(cooldownMs)
-        : "Available now",
-    [cooldownMs]
-  );
 
   // ✅ JSX BELOW REMAINS 100% UNCHANGED
 
