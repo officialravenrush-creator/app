@@ -276,6 +276,24 @@ const applyBoostClaim = useCallback(
     setIsLoading(false);
   }, []);
 
+  const applyDailyClaim = useCallback(
+  (res: { reward: number; dailyClaim: RawDailyRow }) => {
+    // update daily claim state
+    setDailyClaim(res.dailyClaim);
+
+    // add reward to mining balance
+    setMiningData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        balance: prev.balance + res.reward,
+      };
+    });
+  },
+  []
+);
+
+
 return {
   miningData,
   userProfile,
@@ -286,7 +304,8 @@ return {
   start,
   stop,
   claim,
-  applyBoostClaim, // ✅ ADD THIS
+  applyBoostClaim,
+  applyDailyClaim, // 🔥 ADD THIS
   refreshAll,
 };
 

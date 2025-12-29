@@ -149,6 +149,18 @@ const [claimedAmount, setClaimedAmount] = useState(0);
     miningDataRef.current = miningData;
   }, [miningData]);
 
+useEffect(() => {
+  if (!screenReady) return;
+
+  (async () => {
+    try {
+      await initNotifications();
+    } catch {
+      console.warn("Notifications disabled");
+    }
+  })();
+}, [screenReady]);
+
 
 
   useEffect(() => {

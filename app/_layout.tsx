@@ -8,23 +8,12 @@ import { useAuth } from "../hooks/useAuth";
 // AdMob
 import mobileAds from "react-native-google-mobile-ads";
 
-// Notifications
-import {
-  setupNotificationHandler,
-  initNotifications,
-} from "../utils/notifications";
-
 export default function RootLayout() {
   const { user, loading, onboarded } = useAuth();
   const segments = useSegments();
 
-  // ✅ INITIALIZE GLOBAL SERVICES ONCE
+  // ✅ INITIALIZE ADMOB ONLY (SAFE)
   useEffect(() => {
-    // ---- Notifications ----
-    setupNotificationHandler();
-    initNotifications();
-
-    // ---- AdMob (Android only) ----
     if (Platform.OS === "android") {
       mobileAds()
         .initialize()
@@ -37,6 +26,7 @@ export default function RootLayout() {
     }
   }, []);
 
+  // ⏳ Wait for auth
   if (loading) {
     return (
       <View

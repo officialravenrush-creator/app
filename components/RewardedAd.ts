@@ -19,8 +19,8 @@ export async function showRewardedAd(): Promise<boolean> {
   });
 
   return new Promise<boolean>((resolve) => {
-    let earned = false;
     let finished = false;
+    let showed = false;
 
     const unsubscribers: (() => void)[] = [];
 
@@ -32,16 +32,8 @@ export async function showRewardedAd(): Promise<boolean> {
       rewarded.addAdEventListener(
         RewardedAdEventType.LOADED,
         () => {
+          showed = true;
           rewarded.show();
-        }
-      )
-    );
-
-    unsubscribers.push(
-      rewarded.addAdEventListener(
-        RewardedAdEventType.EARNED_REWARD,
-        () => {
-          earned = true;
         }
       )
     );
@@ -53,7 +45,9 @@ export async function showRewardedAd(): Promise<boolean> {
           if (finished) return;
           finished = true;
           cleanup();
-          resolve(earned); // ✅ TRUE only if fully watched
+
+          // ✅ TRUST CLOSE IF AD WAS SHOWN
+          resolve(showed);
         }
       )
     );
@@ -74,3 +68,4 @@ export async function showRewardedAd(): Promise<boolean> {
     rewarded.load();
   });
 }
+

@@ -1,10 +1,5 @@
-//components/WatchEarn.tsx
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useRef,
-} from "react";
+// components/WatchEarn.tsx
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -12,36 +7,11 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Platform,
 } from "react-native";
 
 import { supabase } from "../supabase/client";
-import { showRewardedAd } from "./RewardedAd";
-
-
-/* -------------------------------------------------
-   SUPABASE CLAIM
--------------------------------------------------- */
-const claimWatchRewardSupabase = async (userId: string) => {
-  const { data, error } = await supabase.rpc(
-    "claim_watch_earn_reward",
-    { uid: userId }
-  );
-
-  if (error) throw error;
-
-  // data is an array when RETURNS TABLE
-  const row = Array.isArray(data) ? data[0] : data;
-
-  return {
-    reward: Number(row?.reward ?? 0),
-    stats: {
-      totalWatched: Number(row?.total_watched ?? 0),
-      totalEarned: Number(row?.total_earned ?? 0),
-    },
-  };
-};
-
+import { showInterstitial } from "./InterstitialAd";
+import { claimWatchEarnReward } from "../services/user";
 
 type Props = {
   visible?: boolean;
@@ -97,7 +67,6 @@ export default function WatchEarn({
     totalEarned: 0,
   });
 
- 
   /* -------------------------------------------------
      LOAD STATS + REALTIME
   -------------------------------------------------- */
@@ -113,7 +82,6 @@ export default function WatchEarn({
         .eq("user_id", uid)
         .single();
 
-        
       if (!data || !active) return;
 
       setStats({
@@ -125,19 +93,18 @@ export default function WatchEarn({
     loadStats();
 
     const channel = supabase
-  .channel(`watch_earn_${uid}`)
-  .on(
-    "postgres_changes",
-    {
-      event: "*",
-      schema: "public",
-      table: "watch_earn_data",
-      filter: `user_id=eq.${uid}`, // ✅ CORRECT
-    },
-    loadStats
-  )
-  .subscribe();
-
+      .channel(`watch_earn_${uid}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "watch_earn_data",
+          filter: `user_id=eq.${uid}`,
+        },
+        loadStats
+      )
+      .subscribe();
 
     return () => {
       active = false;
@@ -146,54 +113,46 @@ export default function WatchEarn({
   }, [uid]);
 
   /* -------------------------------------------------
-     WATCH HANDLER
+     WATCH HANDLER (FIXED)
   -------------------------------------------------- */
   const handleWatch = useCallback(async () => {
-  if (!uid || loadingRef.current) return;
+    if (!uid || loadingRef.current) return;
 
-  setLoading(true);
-  loadingRef.current = true;
-  setCompleted(false);
-  setMessage("");
-
- try {
-  // 🔥 SHOW REWARDED AD (must be fully watched)
-  const watched = await showRewardedAd();
-
-  // ❌ Ad not completed or failed to show
-  if (!watched) {
+    setLoading(true);
+    loadingRef.current = true;
     setCompleted(false);
-    setMessage("You must watch the ad fully to earn the reward.");
-    return;
-  }
+    setMessage("");
 
-  // ✅ ONLY THEN call backend
-  const res = await claimWatchRewardSupabase(uid);
+    try {
+      // 🔥 Show interstitial (best-effort, never blocks reward)
+      await showInterstitial();
 
-  if (!res || res.reward <= 0) {
-    setCompleted(false);
-    setMessage("Reward not granted. Please try again later.");
-    return;
-  }
+      // ✅ SINGLE SOURCE OF TRUTH
+      const reward = await claimWatchEarnReward(uid);
 
-  // 🔥 apply backend truth immediately
-  setStats(res.stats);
-  setCompleted(true);
-  setMessage(`+${res.reward.toFixed(2)} VAD credited!`);
+      if (reward <= 0) {
+        setMessage("Reward not available right now. Try again later.");
+        return;
+      }
 
+      // 🔥 Optimistic UI update
+      setStats((prev) => ({
+        totalWatched: prev.totalWatched + 1,
+        totalEarned: prev.totalEarned + reward,
+      }));
 
-  } catch (err) {
-    console.log("Rewarded ad not completed:", err);
-    if (mountedRef.current)
-      setMessage("You must finish the ad to earn rewards.");
-  } finally {
-    if (mountedRef.current) {
-      setLoading(false);
-      loadingRef.current = false;
+      setCompleted(true);
+      setMessage(`+${reward.toFixed(2)} VAD credited!`);
+    } catch (err) {
+      console.log("Watch & Earn error:", err);
+      setMessage("Something went wrong. Please try again.");
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+        loadingRef.current = false;
+      }
     }
-  }
-}, [uid]);
-
+  }, [uid]);
 
   const { totalWatched, totalEarned } = stats;
 
@@ -211,30 +170,24 @@ export default function WatchEarn({
         <View style={styles.card}>
           <Text style={styles.title}>🎥 Watch & Earn</Text>
           <Text style={styles.sub}>
-            Optional rewarded ads for instant VAD
+            Optional ads for instant VAD
           </Text>
 
           <View style={styles.rewardBox}>
             <Text style={styles.reward}>+0.25 VAD</Text>
-            <Text style={styles.limit}>Per completed ad</Text>
+            <Text style={styles.limit}>Per ad</Text>
           </View>
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {totalWatched}
-              </Text>
-              <Text style={styles.statLabel}>
-                Ads Watched
-              </Text>
+              <Text style={styles.statValue}>{totalWatched}</Text>
+              <Text style={styles.statLabel}>Ads Watched</Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>
                 {totalEarned.toFixed(2)}
               </Text>
-              <Text style={styles.statLabel}>
-                VAD Earned
-              </Text>
+              <Text style={styles.statLabel}>VAD Earned</Text>
             </View>
           </View>
 
@@ -248,46 +201,26 @@ export default function WatchEarn({
               ]}
             >
               {loading ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                  }}
-                >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
                   <ActivityIndicator />
-                  <Text
-                    style={[
-                      styles.watchText,
-                      { marginLeft: 10 },
-                    ]}
-                  >
+                  <Text style={[styles.watchText, { marginLeft: 10 }]}>
                     Loading ad...
                   </Text>
                 </View>
               ) : (
-                <Text style={styles.watchText}>
-                  Watch Ad
-                </Text>
+                <Text style={styles.watchText}>Watch Ad</Text>
               )}
             </Pressable>
           ) : (
-            <Pressable
-              onPress={onClose}
-              style={styles.doneBtn}
-            >
+            <Pressable onPress={onClose} style={styles.doneBtn}>
               <Text style={styles.doneText}>Done</Text>
             </Pressable>
           )}
 
-          {message ? (
-            <Text style={styles.message}>{message}</Text>
-          ) : null}
+          {message ? <Text style={styles.message}>{message}</Text> : null}
 
           {!loading && !completed && (
-            <Pressable
-              onPress={onClose}
-              style={styles.skipBtn}
-            >
+            <Pressable onPress={onClose} style={styles.skipBtn}>
               <Text style={styles.skipText}>Close</Text>
             </Pressable>
           )}
@@ -296,6 +229,7 @@ export default function WatchEarn({
     </Modal>
   );
 }
+
 
 /* -------------------------------------------------
    STYLES
