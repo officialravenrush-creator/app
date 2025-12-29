@@ -430,19 +430,27 @@ const elapsed = Math.min(
 
           <Text style={styles.progressMeta}>
             {sessionFinished
-              ? "🎉 Mining complete — claim your VAD"
+              ? "🎉 Mining complete  claim your VAD"
               : `⏳ ${Math.floor(timeLeft / 3600)}h ${Math.floor(
                   (timeLeft % 3600) / 60
                 )}m remaining`}
           </Text>
         </View>
+     
+        
+      {/* FLOATING ACTIONS */}
+<View style={styles.floatingRow}>
+  <View style={styles.floatingActions}>
+    <MiniAction icon="rocket" label="Boost" onPress={() => setBoostOpen(true)} />
+    <MiniAction icon="play-circle" label="More" onPress={() => setWatchOpen(true)} />
+    <MiniAction icon="calendar" label="Daily" onPress={() => setDailyOpen(true)} />
+  </View>
 
-        {/* FLOATING ACTIONS */}
-        <View style={styles.floatingRow}>
-          <MiniAction icon="rocket" label="Boost" onPress={() => setBoostOpen(true)} />
-          <MiniAction icon="play-circle" label="Watch" onPress={() => setWatchOpen(true)} />
-          <MiniAction icon="calendar" label="Daily" onPress={() => setDailyOpen(true)} />
-        </View>
+  <Text style={styles.floatingHint}>
+    Daily, Boost, and More tasks help you earn VAD.
+  </Text>
+</View>
+
 
         {/* NEWS */}
         <Pressable style={styles.newsPreview} onPress={() => setNewsOpen(true)}>
@@ -553,12 +561,31 @@ const styles = StyleSheet.create({
   progressFill: { height: 10, backgroundColor: "#8B5CF6" },
   progressMeta: { marginTop: 10, color: "#9FA8C7", fontSize: 12 },
 
-  floatingRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginHorizontal: 22,
-    marginBottom: 6,
-  },
+ floatingRow: {
+  marginHorizontal: 22,
+  marginBottom: 6,
+  alignItems: "center",
+},
+
+floatingActions: {
+  flexDirection: "row",
+  justifyContent: "space-around",
+  width: "100%",
+},
+
+floatingHint: {
+  marginTop: 4,
+  paddingVertical: 4,
+  paddingHorizontal: 8,
+  borderRadius: 8,
+  backgroundColor: "rgba(139,92,246,0.15)",
+  borderWidth: 1,
+  borderColor: "rgba(139,92,246,0.35)",
+  color: "#C4B5FD",
+  fontSize: 11,
+  fontWeight: "700",
+  textAlign: "center",
+},
 
   miniBtn: {
     alignItems: "center",

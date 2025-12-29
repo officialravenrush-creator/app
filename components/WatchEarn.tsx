@@ -168,14 +168,14 @@ export default function WatchEarn({
     >
       <View style={styles.overlay}>
         <View style={styles.card}>
-          <Text style={styles.title}>🎥 Watch & Earn</Text>
+          <Text style={styles.title}>Earn more</Text>
           <Text style={styles.sub}>
-            Optional ads for instant VAD
+            Optional task for instant VAD
           </Text>
 
           <View style={styles.rewardBox}>
             <Text style={styles.reward}>+0.01 VAD</Text>
-            <Text style={styles.limit}>Per ad</Text>
+            <Text style={styles.limit}>Per per task</Text>
           </View>
 
           <View style={styles.statsRow}>
@@ -204,7 +204,7 @@ export default function WatchEarn({
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
                   <ActivityIndicator />
                   <Text style={[styles.watchText, { marginLeft: 10 }]}>
-                    Loading ad...
+                    Loading task...
                   </Text>
                 </View>
               ) : (

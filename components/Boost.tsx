@@ -206,7 +206,7 @@ export default function Boost({
           <Text style={styles.title}>⚡ Boost Earnings</Text>
 
           <Text style={styles.sub}>
-            Watch a short ad to boost your balance.
+            perform a short task to boost your balance.
           </Text>
 
           <View style={styles.rewardBox}>
@@ -237,10 +237,10 @@ export default function Boost({
           >
             <Text style={styles.watchText}>
               {loading
-                ? "Loading ad..."
+                ? "Loading task..."
                 : remaining === 0
                 ? "No Boosts Left"
-                : "Watch Ad"}
+                : "Boost"}
             </Text>
           </Pressable>
 
