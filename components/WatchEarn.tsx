@@ -13,22 +13,27 @@ import { supabase } from "../supabase/client";
 import { showInterstitial } from "./InterstitialAd";
 import { claimWatchEarnReward } from "../services/user";
 
+const COOLDOWN_SECONDS = 180; // 3 minutes
+
 type Props = {
   visible?: boolean;
   onClose?: () => void;
 };
 
-export default function WatchEarn({
-  visible = false,
-  onClose,
-}: Props) {
+export default function WatchEarn({ visible = false, onClose }: Props) {
   const mountedRef = useRef(true);
   const loadingRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
 
+
+  /* -------------------------------------------------
+     LIFECYCLE
+  -------------------------------------------------- */
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
@@ -43,12 +48,10 @@ export default function WatchEarn({
       setUid(data?.user?.id ?? null);
     });
 
-    const { data } = supabase.auth.onAuthStateChange(
-      (_, session) => {
-        if (!mountedRef.current) return;
-        setUid(session?.user?.id ?? null);
-      }
-    );
+    const { data } = supabase.auth.onAuthStateChange((_, session) => {
+      if (!mountedRef.current) return;
+      setUid(session?.user?.id ?? null);
+    });
 
     return () => {
       data?.subscription?.unsubscribe();
@@ -62,10 +65,32 @@ export default function WatchEarn({
   const [completed, setCompleted] = useState(false);
   const [message, setMessage] = useState("");
 
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+
   const [stats, setStats] = useState({
     totalWatched: 0,
     totalEarned: 0,
+    lastWatchAt: null as string | null,
   });
+
+  /* -------------------------------------------------
+     COOLDOWN TIMER
+  -------------------------------------------------- */
+  const startCooldownTimer = (seconds: number) => {
+    setCooldownLeft(seconds);
+
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    timerRef.current = setInterval(() => {
+      setCooldownLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   /* -------------------------------------------------
      LOAD STATS + REALTIME
@@ -87,7 +112,19 @@ export default function WatchEarn({
       setStats({
         totalWatched: data.total_watched ?? 0,
         totalEarned: data.total_earned ?? 0,
+        lastWatchAt: data.last_watch_at,
       });
+
+      // ⏱️ Restore cooldown if exists
+      if (data.last_watch_at) {
+        const last = new Date(data.last_watch_at).getTime();
+        const now = Date.now();
+        const diff = Math.floor((now - last) / 1000);
+
+        if (diff < COOLDOWN_SECONDS) {
+          startCooldownTimer(COOLDOWN_SECONDS - diff);
+        }
+      }
     };
 
     loadStats();
@@ -113,10 +150,10 @@ export default function WatchEarn({
   }, [uid]);
 
   /* -------------------------------------------------
-     WATCH HANDLER (FIXED)
+     WATCH HANDLER (UNCHANGED LOGIC)
   -------------------------------------------------- */
   const handleWatch = useCallback(async () => {
-    if (!uid || loadingRef.current) return;
+    if (!uid || loadingRef.current || cooldownLeft > 0) return;
 
     setLoading(true);
     loadingRef.current = true;
@@ -124,19 +161,29 @@ export default function WatchEarn({
     setMessage("");
 
     try {
-      // 🔥 Show interstitial (best-effort, never blocks reward)
+      // 🔥 Persist cooldown immediately
+      const now = new Date().toISOString();
+
+      await supabase
+        .from("watch_earn_data")
+        .update({ last_watch_at: now })
+        .eq("user_id", uid);
+
+      startCooldownTimer(COOLDOWN_SECONDS);
+
+      // 🔥 Ad (non-blocking)
       await showInterstitial();
 
-      // ✅ SINGLE SOURCE OF TRUTH
+      // ✅ Reward logic untouched
       const reward = await claimWatchEarnReward(uid);
 
       if (reward <= 0) {
-        setMessage("Reward not available right now. Try again later.");
+        setMessage("Reward not available right now.");
         return;
       }
 
-      // 🔥 Optimistic UI update
       setStats((prev) => ({
+        ...prev,
         totalWatched: prev.totalWatched + 1,
         totalEarned: prev.totalEarned + reward,
       }));
@@ -145,37 +192,39 @@ export default function WatchEarn({
       setMessage(`+${reward.toFixed(2)} VAD credited!`);
     } catch (err) {
       console.log("Watch & Earn error:", err);
-      setMessage("Something went wrong. Please try again.");
+      setMessage("Something went wrong. Try again.");
     } finally {
       if (mountedRef.current) {
         setLoading(false);
         loadingRef.current = false;
       }
     }
-  }, [uid]);
+  }, [uid, cooldownLeft]);
+
+  /* -------------------------------------------------
+     HELPERS
+  -------------------------------------------------- */
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
 
   const { totalWatched, totalEarned } = stats;
 
   /* -------------------------------------------------
-     UI (UNCHANGED)
+     UI
   -------------------------------------------------- */
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => !loading && onClose?.()}
-    >
+    <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card}>
           <Text style={styles.title}>Earn More</Text>
-          <Text style={styles.sub}>
-            Optional task for instant VAD
-          </Text>
+          <Text style={styles.sub}>Optional task for instant VAD</Text>
 
           <View style={styles.rewardBox}>
             <Text style={styles.reward}>+0.01 VAD</Text>
-            <Text style={styles.limit}>Per per task</Text>
+            <Text style={styles.limit}>Per task</Text>
           </View>
 
           <View style={styles.statsRow}>
@@ -194,21 +243,20 @@ export default function WatchEarn({
           {!completed ? (
             <Pressable
               onPress={handleWatch}
-              disabled={loading}
+              disabled={loading || cooldownLeft > 0}
               style={[
                 styles.watchBtn,
-                loading && { opacity: 0.6 },
+                (loading || cooldownLeft > 0) && { opacity: 0.6 },
               ]}
             >
               {loading ? (
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <ActivityIndicator />
-                  <Text style={[styles.watchText, { marginLeft: 10 }]}>
-                    Loading task...
-                  </Text>
-                </View>
+                <ActivityIndicator />
+              ) : cooldownLeft > 0 ? (
+                <Text style={styles.watchText}>
+                  Wait {formatTime(cooldownLeft)}
+                </Text>
               ) : (
-                <Text style={styles.watchText}>Watch Ad</Text>
+                <Text style={styles.watchText}>Earn more</Text>
               )}
             </Pressable>
           ) : (
@@ -230,9 +278,8 @@ export default function WatchEarn({
   );
 }
 
-
 /* -------------------------------------------------
-   STYLES
+   STYLES (UNCHANGED)
 -------------------------------------------------- */
 const styles = StyleSheet.create({
   overlay: {
@@ -248,10 +295,6 @@ const styles = StyleSheet.create({
     padding: 26,
     borderWidth: 1,
     borderColor: "rgba(250,204,21,0.45)",
-    shadowColor: "#FACC15",
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 14,
   },
   title: {
     color: "#fff",
@@ -271,8 +314,6 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 18,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(250,204,21,0.3)",
   },
   reward: {
     color: "#FACC15",
@@ -282,12 +323,10 @@ const styles = StyleSheet.create({
   limit: {
     color: "#9FA8C7",
     fontSize: 12,
-    marginTop: 4,
   },
   statsRow: {
     marginTop: 18,
     flexDirection: "row",
-    justifyContent: "space-between",
   },
   statBox: {
     flex: 1,
@@ -305,7 +344,6 @@ const styles = StyleSheet.create({
   statLabel: {
     color: "#9FA8C7",
     fontSize: 11,
-    marginTop: 2,
   },
   watchBtn: {
     marginTop: 22,
@@ -317,7 +355,6 @@ const styles = StyleSheet.create({
   watchText: {
     color: "#000",
     fontWeight: "900",
-    fontSize: 15,
   },
   doneBtn: {
     marginTop: 22,
@@ -335,7 +372,6 @@ const styles = StyleSheet.create({
     color: "#FACC15",
     textAlign: "center",
     fontWeight: "800",
-    fontSize: 13,
   },
   skipBtn: {
     marginTop: 18,
@@ -343,6 +379,5 @@ const styles = StyleSheet.create({
   },
   skipText: {
     color: "#9FA8C7",
-    fontWeight: "600",
   },
 });

@@ -1,5 +1,3 @@
-// components/News.tsx
-
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -10,6 +8,7 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../supabase/client";
@@ -19,35 +18,57 @@ type Props = {
   onClose: () => void;
 };
 
+type Social = {
+  id: string;
+  name: "twitter" | "discord" | "telegram";
+  url: string;
+  visible: boolean;
+};
+
 export default function News({ visible, onClose }: Props) {
   const [news, setNews] = useState<any[]>([]);
+  const [socials, setSocials] = useState<Social[]>([]);
   const [loading, setLoading] = useState(true);
 
+  /* -------------------------------------------------
+     FETCH NEWS + SOCIALS
+  -------------------------------------------------- */
   useEffect(() => {
     if (!visible) return;
 
     let channel: any;
 
-    const fetchNews = async () => {
+    const fetchAll = async () => {
       setLoading(true);
-      const { data } = await supabase
-        .from("vad_news")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(20);
 
-      if (data) setNews(data);
+      const [{ data: newsData }, { data: socialData }] = await Promise.all([
+        supabase
+          .from("vad_news")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(20),
+        supabase.from("vad_socials").select("*"),
+      ]);
+
+      if (newsData) setNews(newsData);
+      if (socialData) setSocials(socialData);
+
       setLoading(false);
     };
 
-    fetchNews();
+    fetchAll();
 
     channel = supabase
-      .channel("vad-news-modal")
+      .channel("vad-news-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "vad_news" },
-        fetchNews
+        fetchAll
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vad_socials" },
+        fetchAll
       )
       .subscribe();
 
@@ -56,6 +77,18 @@ export default function News({ visible, onClose }: Props) {
     };
   }, [visible]);
 
+  /* -------------------------------------------------
+     ICON MAPPER
+  -------------------------------------------------- */
+  const iconMap: Record<string, string> = {
+    twitter: "logo-twitter",
+    discord: "logo-discord",
+    telegram: "paper-plane",
+  };
+
+  /* -------------------------------------------------
+     UI
+  -------------------------------------------------- */
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
@@ -68,19 +101,53 @@ export default function News({ visible, onClose }: Props) {
             </Pressable>
           </View>
 
+          {/* SOCIALS */}
+          <View style={styles.socialRow}>
+            {socials
+              .filter((s) => s.visible)
+              .map((s) => (
+                <Pressable
+                  key={s.id}
+                  onPress={() => Linking.openURL(s.url)}
+                  style={styles.socialBtn}
+                >
+                  <Ionicons
+                    name={iconMap[s.name] as any}
+                    size={22}
+                    color="#8B5CF6"
+                  />
+                </Pressable>
+              ))}
+          </View>
+
           {/* CONTENT */}
           {loading ? (
-            <ActivityIndicator size="large" color="#8B5CF6" style={{ marginTop: 40 }} />
+            <ActivityIndicator
+              size="large"
+              color="#8B5CF6"
+              style={{ marginTop: 40 }}
+            />
           ) : (
             <ScrollView showsVerticalScrollIndicator={false}>
               {news.map((n) => (
-                <View key={n.id} style={styles.newsBlock}>
+                <Pressable
+                  key={n.id}
+                  style={styles.newsBlock}
+                  onPress={() => n.link && Linking.openURL(n.link)}
+                >
                   {n.image_url && (
-                    <Image source={{ uri: n.image_url }} style={styles.image} />
+                    <Image
+                      source={{ uri: n.image_url }}
+                      style={styles.image}
+                    />
                   )}
                   <Text style={styles.headline}>{n.title}</Text>
                   <Text style={styles.body}>{n.body}</Text>
-                </View>
+
+                  {n.link && (
+                    <Text style={styles.readMore}>Read more →</Text>
+                  )}
+                </Pressable>
               ))}
             </ScrollView>
           )}
@@ -90,6 +157,9 @@ export default function News({ visible, onClose }: Props) {
   );
 }
 
+/* -------------------------------------------------
+   STYLES
+-------------------------------------------------- */
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -114,6 +184,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
   },
+  socialRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  socialBtn: {
+    marginHorizontal: 12,
+    padding: 10,
+    backgroundColor: "rgba(139,92,246,0.15)",
+    borderRadius: 14,
+  },
   newsBlock: {
     backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 16,
@@ -134,5 +215,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     lineHeight: 18,
+  },
+  readMore: {
+    marginTop: 8,
+    color: "#8B5CF6",
+    fontWeight: "700",
+    fontSize: 12,
   },
 });
