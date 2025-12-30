@@ -22,6 +22,8 @@ import WatchEarn from "../../components/WatchEarn";
 import News from "../../components/News";
 import AdBanner from "../../components/AdBanner";
 import ClaimSuccessModal from "../../components/ClaimSuccessModal";
+import PrivacyPolicyModal from "../../components/PrivacyPolicyModal";
+import { usePrivacyPolicy } from "../../hooks/usePrivacyPolicy";
 //import {
   //initNotifications,
   //notifyMiningComplete,
@@ -140,6 +142,14 @@ export default function Page() {
 
   const [claimSuccess, setClaimSuccess] = useState(false);
 const [claimedAmount, setClaimedAmount] = useState(0);
+
+const {
+  loading: policyLoading,
+  required: policyRequired,
+  accept,
+  reject,
+} = usePrivacyPolicy();
+
 
 
   /* ============================================================
@@ -278,6 +288,15 @@ const elapsed = Math.min(
     inputRange: [0, 1],
     outputRange: ["0deg", "360deg"],
   });
+
+  if (policyLoading) {
+  return (
+    <View style={styles.loading}>
+      <ActivityIndicator size="large" color="#8B5CF6" />
+    </View>
+  );
+}
+
 
   /* ============================================================
      RENDER
@@ -480,7 +499,12 @@ const elapsed = Math.min(
   onClose={() => setClaimSuccess(false)}
 />
 
-        
+<PrivacyPolicyModal
+  visible={policyRequired}
+  onAccept={accept}
+  onReject={reject}
+/>
+     
     </View>
   );
 }
