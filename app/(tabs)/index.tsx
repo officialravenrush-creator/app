@@ -24,10 +24,10 @@ import AdBanner from "../../components/AdBanner";
 import ClaimSuccessModal from "../../components/ClaimSuccessModal";
 import PrivacyPolicyModal from "../../components/PrivacyPolicyModal";
 import { usePrivacyPolicy } from "../../hooks/usePrivacyPolicy";
-//import {
-  //initNotifications,
-  //notifyMiningComplete,
-//} from "../../utils/notifications.ts";
+import {
+  initNotifications,
+  notifyMiningComplete,
+} from "../../utils/notifications";
 
 
 /* ============================================================
@@ -162,13 +162,13 @@ const {
 useEffect(() => {
   if (!screenReady) return;
 
-  //(async () => {
-    //try {
-      //await //initNotifications();
-    //} catch {
-      //console.warn("Notifications disabled");
-    //}
-  //})();
+  (async () => {
+    try {
+      await initNotifications();
+    } catch {
+      console.warn("Notifications disabled");
+    }
+  })();
 }, [screenReady]);
 
 
@@ -219,7 +219,7 @@ const elapsed = Math.min(
 
     if (elapsed >= DAY_SECONDS && !notifiedRef.current) {
       notifiedRef.current = true;
-     // notifyMiningComplete(); // 🔔 PHONE NOTIFICATION
+     notifyMiningComplete(); // 🔔 PHONE NOTIFICATION
     }
   }, 1000);
 
