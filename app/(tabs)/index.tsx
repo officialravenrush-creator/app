@@ -378,7 +378,11 @@ export default function Page() {
 
       {/* CONTENT */}
       <Animated.ScrollView
-        contentContainerStyle={{ paddingTop: HEADER_MAX - 12 }}
+  contentContainerStyle={{
+    paddingTop: HEADER_MAX - 12,
+    paddingBottom: 90, // 👈 reserves space for ANY ad height
+  }}
+
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -502,10 +506,11 @@ export default function Page() {
         </Pressable>
          
 
-         <View style={styles.adSpacer} />
+         
         <View style={styles.newsAdWrap}>
-          <AdBanner />
-        </View>
+  <AdBanner />
+</View>
+
       </Animated.ScrollView>
 
       {dailyOpen && <DailyClaim visible onClose={() => setDailyOpen(false)} />}
@@ -652,15 +657,18 @@ floatingHint: {
   newsPreviewTitle: { color: "#fff", fontWeight: "900", marginLeft: 8 },
   newsPreviewText: { color: "#9FA8C7", fontSize: 12, lineHeight: 16 },
 
- newsAdWrap: {
+newsAdWrap: {
   marginHorizontal: 22,
-  marginTop: 12,
-  marginBottom: 12, // 👈 add this
   height: 60,
+  marginTop: 12,
+  marginBottom: 12,
   borderRadius: 18,
   overflow: "hidden",
   backgroundColor: "rgba(255,255,255,0.05)",
+  alignItems: "center",
+  justifyContent: "center",
 },
+
 
 
   headerTagline: {
@@ -692,8 +700,6 @@ floatingHint: {
     letterSpacing: 0.4,
   },
 
-  adSpacer: {
-  height: 18, // 👈 adjust freely (16–28 is ideal)
-},
+
 
 });
