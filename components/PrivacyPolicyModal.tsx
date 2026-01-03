@@ -41,8 +41,9 @@ export default function PrivacyPolicyModal({
               style={styles.logo}
             />
             <Text style={styles.title}>
-              {policy?.title ?? "Privacy Policy"}
-            </Text>
+  {policy?.title ?? "Privacy Policy & Terms of Service"}
+</Text>
+
           </View>
 
           {/* CONTENT */}
