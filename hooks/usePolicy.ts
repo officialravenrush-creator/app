@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/supabase/client";
 
+type Policy = {
+  id: string;
+  title: string;
+  content: string;
+  version: number;
+  effective_from: string;
+};
+
 export function usePolicy(slug: string) {
-  const [policy, setPolicy] = useState<any>(null);
+  const [policy, setPolicy] = useState<Policy | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,12 +25,17 @@ export function usePolicy(slug: string) {
         .select("id,title,content,version,effective_from")
         .eq("slug", slug)
         .eq("is_active", true)
-        .single(); // ✅ simpler, deterministic
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (cancelled) return;
 
       if (error) {
         console.error("[policy] error:", error.message);
+        setPolicy(null);
+      } else if (!data) {
+        console.warn("[policy] no active policy found");
         setPolicy(null);
       } else {
         console.log("[policy] loaded version:", data.version);

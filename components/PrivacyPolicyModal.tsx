@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
-import { usePolicy } from "@/hooks/usePolicy";
+import { usePolicy } from "../hooks/usePolicy";
 
 export default function PrivacyPolicyModal({
   visible,
